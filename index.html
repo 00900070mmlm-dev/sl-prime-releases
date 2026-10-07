@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>SL PRIME 상담 예약</title>
+<meta property="og:title" content="SL PRIME 상담 예약">
+<meta property="og:description" content="편하신 상담 시간을 골라 주세요.">
+<!--
+  학부모용 상담 예약 페이지 (공개). 앱(app/)과 별개로 GitHub Pages 에 올라간다(.github/workflows/release-booking.yml).
+  ?k=<링크 토큰>   → 시간 고르기·예약
+  ?c=<취소 토큰>   → 내 예약 확인·취소
+  Supabase 는 anon 키로 RPC 네 개(booking_view·reserve·mine·cancel)만 부른다. 테이블 직접 접근은 RLS 로 막혀 있다.
+  의존성 없음(순수 JS) — 문자 링크로 들어오는 폰에서 빨리 떠야 한다.
+-->
+<style>
+  :root {
+    --bg: #f5f5f7; --card: #ffffff; --text: #1d1d1f; --dim: #6e6e73; --faint: #a1a1a6;
+    --line: rgba(0,0,0,0.08); --accent: #0066cc; --accent-bg: rgba(0,102,204,0.08); --accent-text: #ffffff;
+    --err: #d70015; --err-bg: rgba(215,0,21,0.07); --ok: #1a7f37; --ok-bg: rgba(26,127,55,0.08);
+    --taken: #e8e8ed;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000; --card: #1c1c1e; --text: #f5f5f7; --dim: #a1a1a6; --faint: #6e6e73;
+      --line: rgba(255,255,255,0.1); --accent: #0a84ff; --accent-bg: rgba(10,132,255,0.16);
+      --err: #ff453a; --err-bg: rgba(255,69,58,0.12); --ok: #30d158; --ok-bg: rgba(48,209,88,0.12);
+      --taken: #2c2c2e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; word-break: keep-all; overflow-wrap: anywhere; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; line-height: 1.5; }
+  main { max-width: 520px; margin: 0 auto; padding: 20px 16px calc(40px + env(safe-area-inset-bottom)); }
+  .brand { font-size: 13px; font-weight: 700; letter-spacing: 0.4px; color: var(--accent); margin: 4px 2px 10px; }
+  h1 { font-size: 24px; line-height: 1.3; margin: 0 2px 6px; letter-spacing: -0.3px; }
+  .sub { color: var(--dim); font-size: 15px; margin: 0 2px 18px; }
+  .card { background: var(--card); border-radius: 18px; padding: 18px 16px; margin-bottom: 14px; }
+  .note { white-space: pre-wrap; font-size: 14.5px; color: var(--dim); }
+  .meta { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 15px; }
+  .meta dt { color: var(--dim); }
+  .meta dd { margin: 0; font-weight: 600; word-break: keep-all; }
+  .sec { font-size: 13px; font-weight: 700; color: var(--dim); margin: 22px 4px 8px; }
+  .days { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; margin: 0 -2px; scrollbar-width: none; }
+  .days::-webkit-scrollbar { display: none; }
+  .day { flex: none; min-width: 64px; padding: 9px 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; text-align: center; cursor: pointer; }
+  .day b { display: block; font-size: 17px; }
+  .day small { display: block; font-size: 12px; color: var(--dim); }
+  .day[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .day[aria-pressed="true"] small { color: rgba(255,255,255,0.8); }
+  .day:disabled { opacity: 0.4; cursor: default; }
+  .times { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .time { padding: 13px 4px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .time[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .time small { display: block; font-size: 12px; font-weight: 500; opacity: 0.75; }
+  .time:disabled { background: var(--taken); color: var(--faint); text-decoration: line-through; font-weight: 400; cursor: default; border-color: transparent; }
+  label { display: block; font-size: 14px; font-weight: 600; margin: 14px 2px 6px; }
+  label span { color: var(--faint); font-weight: 400; }
+  input, textarea { width: 100%; font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px 13px; outline: none; }
+  input:focus, textarea:focus { border-color: var(--accent); }
+  textarea { min-height: 84px; resize: vertical; }
+  .btn { display: block; width: 100%; margin-top: 18px; padding: 15px; border: none; border-radius: 14px; background: var(--accent); color: var(--accent-text); font: inherit; font-size: 17px; font-weight: 700; cursor: pointer; text-align: center; text-decoration: none; }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .btn.ghost { background: var(--accent-bg); color: var(--accent); }
+  .btn.danger { background: var(--err-bg); color: var(--err); }
+  .msg { padding: 12px 14px; border-radius: 12px; font-size: 14.5px; margin: 12px 0 0; }
+  .msg.err { background: var(--err-bg); color: var(--err); }
+  .msg.ok { background: var(--ok-bg); color: var(--ok); }
+  .center { text-align: center; padding: 48px 12px; color: var(--dim); }
+  .big { font-size: 44px; line-height: 1; margin-bottom: 10px; }
+  .chosen { font-size: 15px; font-weight: 600; margin: 14px 2px 0; color: var(--accent); }
+  .linkbox { display: flex; gap: 8px; margin-top: 10px; }
+  .linkbox input { font-size: 13px; padding: 10px 11px; }
+  .linkbox button { flex: none; border: none; border-radius: 12px; background: var(--accent-bg); color: var(--accent); font: inherit; font-weight: 700; padding: 0 14px; cursor: pointer; }
+  .small { font-size: 13px; color: var(--dim); margin: 8px 2px 0; }
+  .lookup-btn { display: block; width: 100%; margin: 0 0 14px; padding: 13px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--accent); font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+  .back { border: none; background: none; color: var(--accent); font: inherit; font-size: 15px; font-weight: 600; padding: 4px 2px; margin: 0 0 8px; cursor: pointer; }
+  table.lk { width: 100%; border-collapse: collapse; font-size: 15px; }
+  table.lk th { text-align: center; font-size: 13px; color: var(--dim); font-weight: 700; padding: 10px 6px; border-bottom: 1px solid var(--line); }
+  table.lk td { text-align: center; padding: 13px 6px; border-bottom: 1px solid var(--line); }
+  table.lk tr:last-child td { border-bottom: none; }
+  table.lk td.t { font-weight: 700; }
+  table.lk td.who { font-weight: 600; letter-spacing: 1px; }
+  table.lk td.free { color: var(--accent); font-weight: 600; }
+  table.lk td.st { font-size: 13px; color: var(--faint); }
+  footer { text-align: center; color: var(--faint); font-size: 12px; margin-top: 28px; }
+</style>
+</head>
+<body>
+<main id="app"><div class="center">불러오는 중…</div></main>
+<script>
+(function () {
+  'use strict';
+  var SUPA_URL = 'https://lfrawudhoppvvwktqbvg.supabase.co';
+  var SUPA_KEY = 'sb_publishable_tagOfpNlqNEXldBIPYqEvw_q0amXG8x';  // 공개용 키(앱과 같음). RLS·RPC 로 보호
+  var ERR = {
+    not_found: '링크를 찾을 수 없습니다. 받으신 주소가 맞는지 확인해 주세요.',
+    closed: '이 상담은 예약이 마감되었습니다. 학원으로 문의해 주세요.',
+    taken: '방금 다른 분이 먼저 예약하셨습니다. 다른 시간을 골라 주세요.',
+    past: '이미 지난 시간입니다.',
+    already: '이 학생은 이미 예약되어 있습니다. 시간을 바꾸시려면 기존 예약을 취소한 뒤 다시 골라 주세요.',
+    invalid: '입력하신 내용을 다시 확인해 주세요.'
+  };
+  var DOW = ['일', '월', '화', '수', '목', '금', '토'];
+  var app = document.getElementById('app');
+  var q = new URLSearchParams(location.search);
+
+  // 시안(?k=demo): 실제 DB 대신 예시 데이터. 예약은 되지 않는다
+  function demoView() {
+    var t = new Date(Date.now() + 9 * 3600000), base0 = Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()) - 9 * 3600000;
+    var mk = function (d, h, m, who) { return { id: 'd' + d + h + m, at: new Date(base0 + d * 86400000 + h * 3600000 + m * 60000).toISOString(), min: 30, taken: !!who, who: who || null }; };
+    return { title: '10월 학부모 상담 (시안)', place: 'SL PRIME 상담실', note: '시안 화면입니다. 실제로 예약되지는 않습니다.', owner: '박시환', active: true,
+      slots: [mk(1, 16, 0, '김*준'), mk(1, 16, 30), mk(1, 17, 0, '이*연'), mk(1, 17, 30), mk(1, 18, 0, '남**수'), mk(2, 15, 0), mk(2, 15, 30, '최*'), mk(2, 16, 0), mk(3, 14, 0), mk(3, 14, 30)] };
+  }
+  function rpc(name, args) {
+    if (args.p_token === 'demo') {
+      if (name === 'booking_view') return Promise.resolve(demoView());
+      return Promise.reject(new Error('시안 화면이라 실제로 예약되지는 않습니다.'));
+    }
+    return fetch(SUPA_URL + '/rest/v1/rpc/' + name, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY, Authorization: 'Bearer ' + SUPA_KEY },
+      body: JSON.stringify(args)
+    }).then(function (r) {
+      return r.json().catch(function () { return null; }).then(function (j) {
+        if (r.ok) return j;
+        var code = j && j.message;
+        var e = new Error(ERR[code] || '잠시 후 다시 시도해 주세요. (' + (code || r.status) + ')');
+        e.code = code;
+        throw e;
+      });
+    }, function () { throw new Error('인터넷 연결을 확인해 주세요.'); });
+  }
+
+  // 시간은 항상 한국 시간으로 보인다(해외 로밍 폰이어도)
+  function kst(iso) {
+    var d = new Date(new Date(iso).getTime() + 9 * 3600000);
+    return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate(), w: d.getUTCDay(), h: d.getUTCHours(), mi: d.getUTCMinutes() };
+  }
+  function dayKey(p) { return p.y + '-' + p.m + '-' + p.d; }
+  function hm(p) { return (p.h < 10 ? '0' : '') + p.h + ':' + (p.mi < 10 ? '0' : '') + p.mi; }
+  function fullDate(iso) { var p = kst(iso); return p.m + '월 ' + p.d + '일 (' + DOW[p.w] + ') ' + hm(p); }   // 24시간제
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fmtPhone(d) { d = String(d || ''); return d.length === 11 ? d.slice(0, 3) + '-' + d.slice(3, 7) + '-' + d.slice(7) : d.length === 10 ? d.slice(0, 3) + '-' + d.slice(3, 6) + '-' + d.slice(6) : d; }
+  function base() { return location.origin + location.pathname; }
+  function store(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
+  function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+  function fail(msg) {
+    app.innerHTML = '<div class="brand">SL PRIME</div><div class="card center"><div class="big">🗓️</div>' + esc(msg) + '</div>';
+  }
+  function head(v) {
+    return '<div class="brand">SL PRIME</div><h1>' + esc(v.title) + '</h1>'
+      + '<p class="sub">' + esc(v.owner) + ' 선생님' + (v.place ? ' · ' + esc(v.place) : '') + '</p>'
+      + (v.note ? '<div class="card note">' + esc(v.note) + '</div>' : '');
+  }
+
+  // ── 예약 화면 ──────────────────────────────────────────────
+  function showBook(token) {
+    // 이 폰에서 이미 예약했으면 확인 화면으로
+    // (학원이 취소했으면 저장해 둔 표를 지우고 그냥 예약 화면으로. ?more=1 은 다른 자녀 예약)
+    var mine = load('slbk:' + token);
+    if (mine && q.get('more') !== '1') {
+      rpc('booking_mine', { p_cancel: mine }).then(function () {
+        location.replace(base() + '?c=' + encodeURIComponent(mine));
+      }, function (e) {
+        if (e.code === 'not_found') store('slbk:' + token, null);
+        q.set('more', '1'); showBook(token);
+      });
+      return;
+    }
+    rpc('booking_view', { p_token: token }).then(function (v) {
+      if (!v.active) { fail(ERR.closed); return; }
+      var open = v.slots.filter(function (s) { return !s.taken; });
+      if (!open.length) {
+        app.innerHTML = head(v) + '<button class="lookup-btn" id="lk">예약 조회</button><div class="card center">지금은 예약 가능한 시간이 없습니다.<br>학원으로 문의해 주세요.</div>';
+        document.getElementById('lk').onclick = function () { renderLookup(token, v, null); };
+        return;
+      }
+      renderBook(token, v);
+    }).catch(function (e) { fail(e.message); });
+  }
+
+  function renderBook(token, v, keepErr) {
+    var byDay = {}, days = [];
+    v.slots.forEach(function (s) {
+      var k = dayKey(kst(s.at));
+      if (!byDay[k]) { byDay[k] = []; days.push(k); }
+      byDay[k].push(s);
+    });
+    var st = { day: null, slot: null };
+    days.some(function (k) { if (byDay[k].some(function (s) { return !s.taken; })) { st.day = k; return true; } return false; });
+
+    app.innerHTML = head(v)
+      + '<button class="lookup-btn" id="lk">예약 조회</button>'
+      + '<div class="sec">날짜</div><div class="days" id="days"></div>'
+      + '<div class="sec">시간</div><div class="times" id="times"></div>'
+      + '<div class="card" style="margin-top:22px">'
+      + '<div class="chosen" id="chosen" style="margin-top:0">시간을 골라 주세요</div>'
+      + '<label for="pn">학부모 성함</label><input id="pn" autocomplete="name" maxlength="30">'
+      + '<label for="sn">학생 이름</label><input id="sn" maxlength="30">'
+      + '<label for="ph">연락처</label><input id="ph" type="tel" inputmode="numeric" autocomplete="tel" placeholder="010-0000-0000" maxlength="13">'
+      + '<label for="mm">상담하고 싶은 내용 <span>(선택)</span></label><textarea id="mm" maxlength="500"></textarea>'
+      + '<button class="btn" id="go" disabled>예약하기</button>'
+      + '<div id="err"></div></div>'
+      + '<footer>SL PRIME</footer>';
+
+    var $ = function (id) { return document.getElementById(id); };
+    if (keepErr) $('err').innerHTML = '<div class="msg err">' + esc(keepErr) + '</div>';
+    $('lk').onclick = function () { renderLookup(token, v, st.day); };
+
+    function draw() {
+      $('days').innerHTML = days.map(function (k) {
+        var p = kst(byDay[k][0].at);
+        var free = byDay[k].some(function (s) { return !s.taken; });
+        return '<button class="day" data-k="' + k + '" aria-pressed="' + (k === st.day) + '"' + (free ? '' : ' disabled') + '>'
+          + '<small>' + p.m + '월</small><b>' + p.d + '</b><small>' + DOW[p.w] + '</small></button>';
+      }).join('');
+      $('times').innerHTML = (byDay[st.day] || []).map(function (s) {
+        return '<button class="time" data-id="' + s.id + '" aria-pressed="' + (st.slot && st.slot.id === s.id) + '"' + (s.taken ? ' disabled aria-label="마감"' : '') + '>' + hm(kst(s.at)) + '<small>~' + hm(kst(new Date(new Date(s.at).getTime() + s.min * 60000).toISOString())) + '</small></button>';
+      }).join('');
+      $('chosen').textContent = st.slot ? fullDate(st.slot.at) + ' (' + st.slot.min + '분)' : '시간을 골라 주세요';
+      check();
+    }
+    function check() {
+      var ok = st.slot && $('pn').value.trim() && $('sn').value.trim() && $('ph').value.replace(/\D/g, '').length >= 9;
+      $('go').disabled = !ok;
+    }
+    $('days').onclick = function (e) {
+      var b = e.target.closest('.day'); if (!b || b.disabled) return;
+      st.day = b.getAttribute('data-k'); st.slot = null; draw();
+    };
+    $('times').onclick = function (e) {
+      var b = e.target.closest('.time'); if (!b || b.disabled) return;
+      var id = b.getAttribute('data-id');
+      st.slot = byDay[st.day].filter(function (s) { return s.id === id; })[0]; draw();
+      $('pn').value ? null : $('pn').focus({ preventScroll: true });
+    };
+    ['pn', 'sn', 'ph', 'mm'].forEach(function (id) { $(id).oninput = check; });
+    $('ph').addEventListener('input', function () {
+      var d = this.value.replace(/\D/g, '').slice(0, 11);
+      this.value = d.length > 7 ? d.slice(0, 3) + '-' + d.slice(3, d.length - 4) + '-' + d.slice(-4) : d.length > 3 ? d.slice(0, 3) + '-' + d.slice(3) : d;
+      check();
+    });
+    $('go').onclick = function () {
+      var btn = this; btn.disabled = true; btn.textContent = '예약하는 중…'; $('err').innerHTML = '';
+      rpc('booking_reserve', {
+        p_token: token, p_slot: st.slot.id, p_parent: $('pn').value, p_student: $('sn').value,
+        p_phone: $('ph').value, p_memo: $('mm').value
+      }).then(function (r) {
+        store('slbk:' + token, r.cancel);
+        location.replace(base() + '?c=' + encodeURIComponent(r.cancel) + '&new=1');
+      }).catch(function (e) {
+        if (e.code === 'taken' || e.code === 'past') {
+          // 판이 바뀌었다 — 새로 받아서 다시 그린다(입력값은 유지)
+          var keep = { pn: $('pn').value, sn: $('sn').value, ph: $('ph').value, mm: $('mm').value };
+          rpc('booking_view', { p_token: token }).then(function (v2) {
+            renderBook(token, v2, e.message);
+            Object.keys(keep).forEach(function (id) { $(id).value = keep[id]; });
+          }).catch(function (e2) { fail(e2.message); });
+          return;
+        }
+        $('err').innerHTML = '<div class="msg err">' + esc(e.message) + '</div>';
+        btn.textContent = '예약하기'; check();
+      });
+    };
+    draw();
+  }
+
+  // ── 예약 조회: 날짜별 시간표 + 예약한 학생 이름(가운데 글자는 서버에서 * 로 가려서 온다) ──
+  function renderLookup(token, v, startDay) {
+    var byDay = {}, days = [];
+    v.slots.forEach(function (s) {
+      var k = dayKey(kst(s.at));
+      if (!byDay[k]) { byDay[k] = []; days.push(k); }
+      byDay[k].push(s);
+    });
+    var day = startDay && byDay[startDay] ? startDay : days[0];
+    function draw() {
+      var rows = (byDay[day] || []).map(function (s) {
+        var p = kst(s.at), e = kst(new Date(new Date(s.at).getTime() + s.min * 60000).toISOString());
+        return '<tr><td class="t">' + hm(p) + '–' + hm(e) + '</td>'
+          + (s.taken ? '<td class="who">' + esc(s.who || '예약됨') + '</td><td class="st">예약 완료</td>'
+                     : '<td class="free">—</td><td class="st" style="color:var(--accent)">예약 가능</td>') + '</tr>';
+      }).join('');
+      app.innerHTML = '<div class="brand">SL PRIME</div>'
+        + '<button class="back" id="bk">‹ 예약하기로 돌아가기</button>'
+        + '<h1>예약 조회</h1><p class="sub">' + esc(v.title) + ' · ' + esc(v.owner) + ' 선생님</p>'
+        + (days.length
+          ? '<div class="sec">날짜</div><div class="days" id="days">' + days.map(function (k) {
+              var p = kst(byDay[k][0].at);
+              return '<button class="day" data-k="' + k + '" aria-pressed="' + (k === day) + '"><small>' + p.m + '월</small><b>' + p.d + '</b><small>' + DOW[p.w] + '</small></button>';
+            }).join('') + '</div>'
+            + '<div class="card" style="padding:6px 10px;margin-top:8px"><table class="lk"><thead><tr><th>시간</th><th>학생 이름</th><th>상태</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+            + '<p class="small">개인정보 보호를 위해 학생 이름 가운데 글자는 * 로 표시됩니다.</p>'
+          : '<div class="card center">열린 시간이 없습니다.</div>')
+        + '<footer>SL PRIME</footer>';
+      document.getElementById('bk').onclick = function () { showBook(token); };
+      var d = document.getElementById('days');
+      if (d) d.onclick = function (e) { var b = e.target.closest('.day'); if (!b) return; day = b.getAttribute('data-k'); draw(); };
+    }
+    draw();
+    window.scrollTo(0, 0);
+  }
+
+  // ── 내 예약 확인·취소 ───────────────────────────────────────
+  function showMine(ctok, isNew) {
+    rpc('booking_mine', { p_cancel: ctok }).then(function (m) {
+      store('slbk:' + m.token, ctok);
+      var url = base() + '?c=' + encodeURIComponent(ctok);
+      app.innerHTML = '<div class="brand">SL PRIME</div>'
+        + (isNew ? '<div class="card center" style="padding:28px 12px"><div class="big">✅</div><b style="font-size:19px;color:var(--text)">예약되었습니다</b></div>' : '<h1>예약 확인</h1><p class="sub">' + esc(m.title) + '</p>')
+        + '<div class="card"><dl class="meta">'
+        + '<dt>일시</dt><dd>' + esc(fullDate(m.at)) + ' · ' + m.min + '분</dd>'
+        + '<dt>상담</dt><dd>' + esc(m.title) + '</dd>'
+        + '<dt>선생님</dt><dd>' + esc(m.owner) + '</dd>'
+        + (m.place ? '<dt>장소</dt><dd>' + esc(m.place) + '</dd>' : '')
+        + '<dt>학생</dt><dd>' + esc(m.student) + '</dd>'
+        + '<dt>학부모</dt><dd>' + esc(m.parent) + ' · ' + esc(fmtPhone(m.phone)) + '</dd>'
+        + (m.memo ? '<dt>내용</dt><dd style="font-weight:400;white-space:pre-wrap">' + esc(m.memo) + '</dd>' : '')
+        + '</dl></div>'
+        + (m.past ? '<div class="card center" style="padding:20px">지난 상담입니다.</div>'
+          : '<div class="card"><b>이 주소를 보관해 주세요</b><p class="small" style="margin:4px 0 0">예약 확인·취소는 이 주소로 하실 수 있습니다.</p>'
+            + '<div class="linkbox"><input id="u" readonly value="' + esc(url) + '"><button id="cp">복사</button></div>'
+            + '<button class="btn danger" id="cx">예약 취소</button><div id="err"></div></div>'
+            + (m.active ? '<a class="btn ghost" href="' + esc(base() + '?k=' + encodeURIComponent(m.token) + '&more=1') + '">다른 자녀도 예약하기</a>' : ''))
+        + '<footer>SL PRIME</footer>';
+      if (isNew) history.replaceState(null, '', url);
+      if (m.past) return;
+      document.getElementById('cp').onclick = function () {
+        var b = this, inp = document.getElementById('u');
+        var done = function () { b.textContent = '복사됨'; setTimeout(function () { b.textContent = '복사'; }, 1500); };
+        if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, function () { inp.select(); document.execCommand('copy'); done(); });
+        else { inp.select(); document.execCommand('copy'); done(); }
+      };
+      document.getElementById('cx').onclick = function () {
+        if (!confirm(fullDate(m.at) + ' 상담 예약을 취소할까요?')) return;
+        var b = this; b.disabled = true; b.textContent = '취소하는 중…';
+        rpc('booking_cancel', { p_cancel: ctok }).then(function (r) {
+          store('slbk:' + r.token, null);
+          app.innerHTML = '<div class="brand">SL PRIME</div><div class="card center"><div class="big">🗓️</div>예약이 취소되었습니다.</div>'
+            + (m.active ? '<a class="btn ghost" href="' + esc(base() + '?k=' + encodeURIComponent(r.token)) + '">다른 시간으로 다시 예약하기</a>' : '');
+        }).catch(function (e) {
+          document.getElementById('err').innerHTML = '<div class="msg err">' + esc(e.message) + '</div>';
+          b.disabled = false; b.textContent = '예약 취소';
+        });
+      };
+    }).catch(function (e) {
+      // 취소된 예약의 토큰이 남아 있으면 지운다
+      if (e.code === 'not_found') {
+        try { Object.keys(localStorage).forEach(function (k) { if (k.indexOf('slbk:') === 0 && localStorage.getItem(k) === ctok) localStorage.removeItem(k); }); } catch (x) {}
+        fail('예약을 찾을 수 없습니다. 이미 취소되었을 수 있습니다.');
+        return;
+      }
+      fail(e.message);
+    });
+  }
+
+  var c = q.get('c'), k = q.get('k');
+  if (c) showMine(c, q.get('new') === '1');
+  else if (k) showBook(k);
+  else fail('받으신 예약 링크로 들어와 주세요.');
+})();
+</script>
+</body>
+</html>
