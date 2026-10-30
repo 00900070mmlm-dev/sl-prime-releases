@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>SL PRIME</title>
+<!--
+  my.sl-edu.com 의 첫 화면. 보통은 아무도 여기로 안 온다 — 받은 링크를 바로 누르니까.
+  주소를 그냥 쳐서 들어온 사람이 404 를 보지 않게 두는 페이지다.
+  GitHub Pages 는 레포 하나에 도메인 하나뿐이라, 학부모용·학생용을 호스트가 아니라
+  **경로**로 가른다(/booking/ · /grade/ · /report/). 늘어나면 여기에 줄을 더한다.
+-->
+<style>
+  :root {
+    --bg: #f5f5f7; --card: #ffffff; --text: #1d1d1f; --dim: #6e6e73; --faint: #a1a1a6;
+    --line: rgba(0,0,0,0.08); --accent: #0066cc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000; --card: #1c1c1e; --text: #f5f5f7; --dim: #a1a1a6; --faint: #6e6e73;
+      --line: rgba(255,255,255,0.1); --accent: #0a84ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; word-break: keep-all; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; line-height: 1.5; }
+  main { max-width: 520px; margin: 0 auto; padding: 20px 16px calc(40px + env(safe-area-inset-bottom)); }
+  .brand { font-size: 13px; font-weight: 700; letter-spacing: 0.4px; color: var(--accent); margin: 4px 2px 10px; }
+  h1 { font-size: 24px; line-height: 1.3; margin: 0 2px 6px; letter-spacing: -0.3px; }
+  .sub { color: var(--dim); font-size: 15px; margin: 0 2px 18px; }
+  a.item { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit;
+    background: var(--card); border-radius: 18px; padding: 18px 16px; margin-bottom: 12px; }
+  a.item b { display: block; font-size: 16px; }
+  a.item .m { display: block; font-size: 13px; color: var(--dim); margin-top: 3px; }
+  a.item .go { margin-left: auto; color: var(--faint); font-size: 20px; }
+  .note { color: var(--faint); font-size: 12.5px; text-align: center; margin-top: 22px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">SL PRIME</div>
+  <h1>무엇을 하시겠어요?</h1>
+  <p class="sub">문자로 받으신 링크가 있으면 그 링크를 바로 눌러 주세요.</p>
+
+  <a class="item" href="./grade/">
+    <span>
+      <b>주간테스트 채점 <span class="m" style="display:inline">학생</span></b>
+      <span class="m">답을 넣으면 점수와 오답노트가 바로 나와요</span>
+    </span>
+    <span class="go">&rsaquo;</span>
+  </a>
+
+  <a class="item" href="./booking/">
+    <span>
+      <b>상담 예약 <span class="m" style="display:inline">학부모</span></b>
+      <span class="m">선생님이 보내 드린 링크로 들어와 주세요</span>
+    </span>
+    <span class="go">&rsaquo;</span>
+  </a>
+
+  <a class="item" href="./report/">
+    <span>
+      <b>월간 레포트 <span class="m" style="display:inline">학부모</span></b>
+      <span class="m">이번 달 주간테스트 결과를 한눈에 볼 수 있어요</span>
+    </span>
+    <span class="go">&rsaquo;</span>
+  </a>
+
+  <p class="note">문의는 학원으로 연락해 주세요.</p>
+  <!-- 직원용 — 사내 앱(SL PRIME)의 웹판. 같은 이름·비밀번호로 로그인한다. 학부모·학생 눈에 띄지 않게 작게 둔다. -->
+  <p class="note" style="margin-top:10px"><a href="./prime/" style="color:inherit">직원 로그인</a></p>
+</main>
+</body>
+</html>

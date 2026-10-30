@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>SL PRIME 월간 레포트</title>
+<meta property="og:title" content="SL PRIME 월간 레포트">
+<meta property="og:description" content="이번 달 주간테스트 결과를 확인하세요.">
+<!--
+  학부모용 월간 레포트 (공개). 앱(app/)과 별개로 GitHub Pages 에 올라간다
+  (.github/workflows/release-web.yml 이 web/ 전체를 올린다 — /booking/ 상담 · /grade/ 채점).
+
+  매달 알림톡이 학부모에게 가고, 버튼을 누르면 이 페이지가 열린다.
+  **들어오는 길이 둘이다** — 발송 업체마다 버튼 URL 에 개인별 값을 넣을 수 있기도,
+  고정 URL 만 받기도 하기 때문이다(채널톡은 고정만 — 2026-10-28 확인).
+    ① /report/?t=<링크토큰>  → 누르면 바로 열린다(로그인 없음)
+    ② /report/               → 학생 이름 + **학부모 번호 뒷 4자리**
+  학부모는 학생의 채점 링크 비밀번호를 모르므로 ② 는 학부모 번호를 쓴다.
+
+  Supabase 는 anon 키로 RPC 세 개(report_open·report_start·report_view)만 부른다.
+  **읽기만 한다** — 이 페이지에서 고치는 것은 없다. 등수는 보여 주지 않는다(반 평균만).
+  의존성 없음(순수 JS) — 알림톡으로 받은 링크를 폰에서 열었을 때 빨리 떠야 한다.
+-->
+<style>
+  :root {
+    --bg: #f5f5f7; --card: #ffffff; --text: #1d1d1f; --dim: #6e6e73; --faint: #a1a1a6;
+    --line: rgba(0,0,0,0.08); --accent: #0066cc; --accent-bg: rgba(0,102,204,0.08);
+    --err: #d70015; --err-bg: rgba(215,0,21,0.07); --ok: #1a7f37; --ok-bg: rgba(26,127,55,0.08);
+    --track: rgba(0,0,0,0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000; --card: #1c1c1e; --text: #f5f5f7; --dim: #a1a1a6; --faint: #6e6e73;
+      --line: rgba(255,255,255,0.1); --accent: #0a84ff; --accent-bg: rgba(10,132,255,0.16);
+      --err: #ff453a; --err-bg: rgba(255,69,58,0.12); --ok: #30d158; --ok-bg: rgba(48,209,88,0.12);
+      --track: rgba(255,255,255,0.1);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; word-break: keep-all; overflow-wrap: anywhere; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; line-height: 1.5; }
+  main { max-width: 520px; margin: 0 auto; padding: 20px 16px calc(40px + env(safe-area-inset-bottom)); }
+  .brand { font-size: 13px; font-weight: 700; letter-spacing: 0.4px; color: var(--accent); margin: 4px 2px 10px; }
+  h1 { font-size: 24px; line-height: 1.3; margin: 0 2px 6px; letter-spacing: -0.3px; }
+  .sub { color: var(--dim); font-size: 15px; margin: 0 2px 18px; }
+  h2 { font-size: 15px; margin: 0 0 10px; letter-spacing: -0.2px; }
+  .card { background: var(--card); border-radius: 18px; padding: 18px 16px; margin-bottom: 14px; }
+  label.f { display: block; margin-bottom: 12px; }
+  label.f span { display: block; font-size: 13px; color: var(--dim); margin-bottom: 5px; }
+  input[type=text], input[type=password] { width: 100%; padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px;
+    font: inherit; font-size: 16px; background: var(--bg); color: var(--text); }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button { font: inherit; cursor: pointer; }
+  .go { width: 100%; padding: 15px; border: none; border-radius: 14px; background: var(--accent); color: #fff;
+    font-size: 16px; font-weight: 700; }
+  .go[disabled] { opacity: 0.5; }
+  .ghost { padding: 10px 16px; border: 1px solid var(--line); border-radius: 9999px; background: transparent; color: var(--text); font-size: 14px; }
+  .msg { padding: 12px 14px; border-radius: 12px; font-size: 14.5px; margin-bottom: 12px; }
+  .msg.err { background: var(--err-bg); color: var(--err); }
+  .msg.ok { background: var(--ok-bg); color: var(--ok); }
+  .note { font-size: 13px; color: var(--faint); margin: 10px 2px 0; }
+
+  /* 이번 달 요약 */
+  .sum { text-align: center; padding: 6px 0 2px; }
+  .sum .big { font-size: 46px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.1; }
+  .sum .big i { font-size: 20px; font-weight: 600; font-style: normal; color: var(--dim); margin-left: 2px; }
+  .sum .of { color: var(--dim); font-size: 14.5px; margin-top: 4px; }
+  .cmp { display: flex; gap: 8px; margin-top: 14px; }
+  .cmp div { flex: 1; text-align: center; background: var(--bg); border-radius: 12px; padding: 10px 6px; }
+  .cmp b { display: block; font-size: 17px; letter-spacing: -0.3px; }
+  .cmp span { font-size: 12px; color: var(--dim); }
+  .cmp b.up { color: var(--ok); } .cmp b.down { color: var(--err); }
+
+  /* 주차별 막대 */
+  .wk { display: flex; align-items: center; gap: 10px; margin-bottom: 11px; }
+  .wk .lab { flex: none; width: 58px; font-size: 13px; color: var(--dim); }
+  .wk .bar { flex: 1; height: 22px; background: var(--track); border-radius: 7px; position: relative; overflow: hidden; }
+  .wk .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 7px; }
+  .wk .bar u { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--faint); text-decoration: none; }
+  .wk .val { flex: none; width: 46px; text-align: right; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .wk.miss .val { color: var(--faint); font-weight: 400; font-size: 13px; }
+  .rng { font-size: 12px; color: var(--faint); margin: -7px 0 11px 68px; }
+  .lg { display: flex; gap: 14px; font-size: 12px; color: var(--faint); margin-top: 2px; }
+  .lg i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--accent); margin-right: 4px; vertical-align: -1px; }
+  .lg u { display: inline-block; width: 2px; height: 10px; background: var(--faint); margin-right: 5px; vertical-align: -1px; text-decoration: none; }
+
+  /* 유형 */
+  .ty { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+  .ty .lab { flex: none; width: 58px; font-size: 13.5px; font-weight: 600; }
+  .ty .bar { flex: 1; height: 16px; background: var(--track); border-radius: 5px; overflow: hidden; }
+  .ty .bar i { display: block; height: 100%; background: var(--err); opacity: 0.75; border-radius: 5px; }
+  .ty .val { flex: none; width: 50px; text-align: right; font-size: 13px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .months { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .months button { padding: 7px 14px; border: 1px solid var(--line); border-radius: 9999px; background: var(--card); color: var(--text); font-size: 13.5px; }
+  .months button[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 700; }
+  .foot { text-align: center; color: var(--faint); font-size: 12px; margin-top: 18px; }
+
+  @media print {
+    @page { size: A4; margin: 16mm 14mm; }
+    body { background: #fff; color: #000; }
+    main { max-width: none; padding: 0; }
+    .card { border-radius: 0; padding: 0 0 14px; margin: 0 0 14px; border-bottom: 1px solid #ddd; background: #fff; }
+    .noprint { display: none !important; }
+    .wk .bar, .ty .bar { background: #eee; }
+    .wk .bar i { background: #666; } .ty .bar i { background: #999; }
+    .cmp div { background: #f4f4f4; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand noprint">SL PRIME</div>
+  <div id="app"></div>
+  <div class="foot noprint">문의는 학원으로 연락해 주세요.</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var SUPA_URL = 'https://lfrawudhoppvvwktqbvg.supabase.co';
+  var SUPA_KEY = 'sb_publishable_tagOfpNlqNEXldBIPYqEvw_q0amXG8x';  // 공개용 키(앱과 같음). RLS·RPC 로 보호
+  var app = document.getElementById('app');
+  var S = { token: null, name: '', months: [], ym: null, data: null };
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function rpc(name, args) {
+    return fetch(SUPA_URL + '/rest/v1/rpc/' + name, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY, Authorization: 'Bearer ' + SUPA_KEY },
+      body: JSON.stringify(args || {})
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        var d = null;
+        try { d = t ? JSON.parse(t) : null; } catch (e) {}
+        if (!r.ok) throw new Error((d && (d.message || d.hint)) || ('오류 ' + r.status));
+        return d;
+      });
+    });
+  }
+  function show(err, cls) {
+    var m = el('div', 'msg ' + (cls || 'err'), err);
+    app.insertBefore(m, app.firstChild);
+    window.scrollTo(0, 0);
+  }
+  function ymName(ym) {
+    var p = String(ym || '').split('-');
+    return p.length === 2 ? Number(p[0]) + '년 ' + Number(p[1]) + '월' : (ym || '');
+  }
+  // 주 이름은 그 달의 몇 번째 월요일 — 앱(waWeekName)·채점 링크와 같은 규칙
+  function weekName(ymd) {
+    var p = String(ymd || '').split('-');
+    if (p.length !== 3) return ymd || '';
+    return Number(p[1]) + '월 ' + (Math.floor((Number(p[2]) - 1) / 7) + 1) + '주';
+  }
+  function num(v) { return (v == null || v === '') ? null : Number(v); }
+  // 유형이 무엇을 묻는 문제인지 — 학부모용 한 줄. 유형 이름은 앱의 AC_TYPES(18-hwpxai.js)와 같다.
+  // 선생님 손을 안 거치므로 "수업에서 보강합니다" 같은 약속은 적지 않는다(2026-10-28 사장님).
+  var TYPE_DESC = {
+    '어법': '문장의 구조(주어·동사 일치, 관계사, 시제 등)를 보는 문제',
+    '어휘': '문맥에 맞는 단어를 고르는 문제',
+    '대의': '글의 주제·제목·요지를 잡는 문제',
+    '일치': '글의 내용과 맞는지 틀린지 확인하는 문제',
+    '빈칸': '글의 흐름을 읽고 빈칸에 들어갈 말을 추론하는 문제',
+    '무관': '글의 흐름과 관계없는 문장을 찾는 문제',
+    '순서': '뒤섞인 단락의 순서를 맞추는 문제',
+    '삽입': '주어진 문장이 들어갈 자리를 찾는 문제',
+    '요약': '글을 한 문장으로 요약하는 문제',
+    '지칭': '대명사가 가리키는 것을 찾는 문제',
+    '심경': '인물의 심경과 글의 분위기를 읽는 문제',
+    '영작': '우리말을 영어 문장으로 옮기는 문제',
+    '배열': '주어진 단어를 순서대로 배열해 문장을 만드는 문제',
+    '오류수정': '문장에서 틀린 부분을 찾아 고치는 문제'
+  };
+
+  // ── ① 이름 + 학부모 번호 뒷 4자리 (고정 주소로 들어온 경우) ──────────
+  function viewLogin(msg) {
+    app.innerHTML = '';
+    app.appendChild(el('h1', null, '월간 레포트'));
+    app.appendChild(el('p', 'sub', '학생 이름과 학부모님 전화번호 뒤 4자리를 넣어 주세요.'));
+    if (msg) show(msg);
+    var card = el('div', 'card');
+    var l1 = el('label', 'f'); l1.appendChild(el('span', null, '학생 이름'));
+    var i1 = el('input'); i1.type = 'text'; i1.autocomplete = 'off'; i1.placeholder = '홍길동'; l1.appendChild(i1);
+    var l2 = el('label', 'f'); l2.appendChild(el('span', null, '학부모님 전화번호 뒤 4자리'));
+    var i2 = el('input'); i2.type = 'password'; i2.inputMode = 'numeric'; i2.maxLength = 4;
+    i2.autocomplete = 'off'; i2.placeholder = '••••'; l2.appendChild(i2);
+    var go = el('button', 'go', '레포트 보기');
+    card.appendChild(l1); card.appendChild(l2); card.appendChild(go);
+    app.appendChild(card);
+    app.appendChild(el('p', 'note', '학원에 등록된 학부모님 번호로만 열립니다. 안 되면 학원으로 연락해 주세요.'));
+
+    function submit() {
+      var nm = i1.value.trim(), pw = i2.value.trim();
+      if (!nm || !/^[0-9]{4}$/.test(pw)) return show('이름과 번호 뒤 4자리를 넣어 주세요.');
+      go.disabled = true; go.textContent = '여는 중…';
+      rpc('report_start', { p_name: nm, p_pw: pw }).then(function (d) {
+        S.token = d.token; S.name = d.name; S.months = d.months || [];
+        if (!S.months.length) { viewLogin('아직 레포트에 담을 시험 결과가 없습니다.'); return; }
+        openMonth(S.months[0]);
+      }).catch(function (e) {
+        go.disabled = false; go.textContent = '레포트 보기';
+        show(e.message);
+      });
+    }
+    go.addEventListener('click', submit);
+    i2.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    i1.focus();
+  }
+
+  function openMonth(ym) {
+    app.innerHTML = '';
+    app.appendChild(el('p', 'sub', '불러오는 중…'));
+    rpc('report_view', { p_token: S.token, p_ym: ym }).then(function (d) {
+      S.ym = ym; S.data = d; viewReport();
+    }).catch(function (e) { viewLogin(e.message); });
+  }
+
+  // ── ② 레포트 ────────────────────────────────────────────────
+  function viewReport() {
+    var d = S.data;
+    app.innerHTML = '';
+    app.appendChild(el('h1', null, d.name + ' 학생'));
+    app.appendChild(el('p', 'sub', ymName(d.ym) + ' 주간테스트 결과'));
+
+    // 볼 수 있는 달이 여럿이면 고르게 한다
+    if (S.months.length > 1) {
+      var ms = el('div', 'months noprint');
+      S.months.forEach(function (m) {
+        var b = el('button', null, ymName(m));
+        b.setAttribute('aria-pressed', String(m === S.ym));
+        b.addEventListener('click', function () { if (m !== S.ym) openMonth(m); });
+        ms.appendChild(b);
+      });
+      app.appendChild(ms);
+    }
+
+    var tests = d.tests || [];
+    var avg = num(d.avg), cavg = num(d.class_avg), prev = num(d.prev_avg);
+
+    // 요약 — 평균 점수 + 반 평균·지난달 비교
+    var sum = el('div', 'card');
+    var box = el('div', 'sum');
+    var big = el('div', 'big', avg == null ? '—' : String(avg));
+    if (avg != null) big.appendChild(el('i', null, '점'));
+    box.appendChild(big);
+    box.appendChild(el('div', 'of', avg == null
+      ? '이번 달에는 응시한 시험이 없습니다.'
+      : '이번 달 평균 · ' + d.total + '회 중 ' + d.taken + '회 응시'
+        + (d.total - d.taken > 0 ? ' (' + (d.total - d.taken) + '회 미응시)' : '')));
+    sum.appendChild(box);
+
+    if (avg != null) {
+      var cmp = el('div', 'cmp');
+      if (cavg != null) {
+        var c1 = el('div');
+        var b1 = el('b', null, (avg - cavg >= 0 ? '+' : '') + Math.round((avg - cavg) * 10) / 10 + '점');
+        b1.className = avg - cavg >= 0 ? 'up' : 'down';
+        c1.appendChild(b1); c1.appendChild(el('span', null, '반 평균 ' + cavg + '점 대비'));
+        cmp.appendChild(c1);
+      }
+      if (prev != null) {
+        var c2 = el('div');
+        var b2 = el('b', null, (avg - prev >= 0 ? '+' : '') + Math.round((avg - prev) * 10) / 10 + '점');
+        b2.className = avg - prev >= 0 ? 'up' : 'down';
+        c2.appendChild(b2); c2.appendChild(el('span', null, '지난달 ' + prev + '점 대비'));
+        cmp.appendChild(c2);
+      }
+      // 학생이 채점 링크로 직접 채점하고 오답을 확인한 횟수 — 스스로 챙기고 있다는 신호
+      var selfN = tests.filter(function (t) { return t.self && num(t.score) != null; }).length;
+      if (d.taken > 0) {
+        var c3 = el('div');
+        c3.appendChild(el('b', null, selfN + '/' + d.taken + '회'));
+        c3.appendChild(el('span', null, '직접 채점·오답 확인'));
+        cmp.appendChild(c3);
+      }
+      if (cmp.children.length) sum.appendChild(cmp);
+    }
+    app.appendChild(sum);
+
+    // 주차별 점수 — 막대 하나가 한 주. 얇은 선은 그 주의 반 평균.
+    if (tests.length) {
+      var wkCard = el('div', 'card');
+      wkCard.appendChild(el('h2', null, '주차별 점수'));
+      tests.forEach(function (t) {
+        var sc = num(t.score), ca = num(t.class_avg);
+        var row = el('div', 'wk' + (sc == null ? ' miss' : ''));
+        row.appendChild(el('div', 'lab', weekName(t.week_start)));
+        var bar = el('div', 'bar');
+        if (sc != null) { var fill = el('i'); fill.style.width = Math.max(2, Math.min(100, sc)) + '%'; bar.appendChild(fill); }
+        if (ca != null) { var mk = el('u'); mk.style.left = Math.max(0, Math.min(100, ca)) + '%'; bar.appendChild(mk); }
+        row.appendChild(bar);
+        row.appendChild(el('div', 'val', sc == null ? '미응시' : sc + '점'));
+        wkCard.appendChild(row);
+        // 그 주에 배운 범위(시험지 등록 때 적은 시험 범위) — 진도가 보이게
+        if (t.range_text) wkCard.appendChild(el('div', 'rng', t.range_text));
+      });
+      var lg = el('div', 'lg');
+      var g1 = el('span'); g1.appendChild(el('i')); g1.appendChild(document.createTextNode(d.name + ' 학생'));
+      var g2 = el('span'); g2.appendChild(el('u')); g2.appendChild(document.createTextNode('반 평균'));
+      lg.appendChild(g1); lg.appendChild(g2);
+      wkCard.appendChild(lg);
+      app.appendChild(wkCard);
+    }
+
+    // 자주 틀린 유형 — 채점 링크로 푼 시험에서만 쌓인다. 없으면 이 칸을 아예 안 그린다.
+    var types = (d.types || []).filter(function (t) { return t.type; });
+    if (types.length) {
+      var tyCard = el('div', 'card');
+      tyCard.appendChild(el('h2', null, '자주 틀린 유형'));
+      var max = types[0].n || 1;
+      types.slice(0, 6).forEach(function (t) {
+        var row = el('div', 'ty');
+        row.appendChild(el('div', 'lab', t.type));
+        var bar = el('div', 'bar'); var fill = el('i');
+        fill.style.width = Math.max(4, Math.round(t.n * 100 / max)) + '%';
+        bar.appendChild(fill); row.appendChild(bar);
+        row.appendChild(el('div', 'val', t.n + '문항'));
+        tyCard.appendChild(row);
+      });
+      var top = types[0].type, desc = TYPE_DESC[top];
+      // 받침이 있으면 '은', 없으면 '는' (어법은 · 어휘는)
+      var last = top.charCodeAt(top.length - 1), josa = (last >= 0xAC00 && last <= 0xD7A3 && (last - 0xAC00) % 28 !== 0) ? '은' : '는';
+      tyCard.appendChild(el('p', 'note', top + ' 유형을 가장 많이 틀렸습니다.' + (desc ? ' ' + top + josa + ' ' + desc + '입니다.' : '')));
+      // 이미 있는 기능으로 잇는다 — 채점 링크의 '틀린 것 다시 풀어보기'. 선생님 손이 안 간다.
+      tyCard.appendChild(el('p', 'note', '틀린 문항은 학생의 채점 링크(my.sl-edu.com/grade)에서 「틀린 것 다시 풀어보기」로 다시 풀 수 있습니다.'));
+      app.appendChild(tyCard);
+    }
+
+    // 인쇄(= 폰에서 PDF 로 저장)
+    var act = el('div', 'noprint');
+    act.style.cssText = 'display:flex;gap:8px;justify-content:center;margin-top:4px';
+    var pr = el('button', 'ghost', '인쇄 · PDF 저장');
+    pr.addEventListener('click', function () { window.print(); });
+    act.appendChild(pr);
+    app.appendChild(act);
+  }
+
+  // ── 들어오기 ────────────────────────────────────────────────
+  // ?t=<링크토큰> 이면 바로 연다. 없으면 이름+번호로 확인한다.
+  var t = (location.search.match(/[?&]t=([0-9a-fA-F-]{36})/) || [])[1];
+  if (t) {
+    app.appendChild(el('p', 'sub', '불러오는 중…'));
+    rpc('report_open', { p_link: t }).then(function (d) {
+      S.token = d.token; S.name = d.name; S.months = d.months || [];
+      var ym = d.ym && S.months.indexOf(d.ym) >= 0 ? d.ym : S.months[0];
+      if (!ym) { viewLogin('아직 레포트에 담을 시험 결과가 없습니다.'); return; }
+      openMonth(ym);
+    }).catch(function (e) { viewLogin(e.message); });
+  } else {
+    viewLogin();
+  }
+})();
+</script>
+</body>
+</html>

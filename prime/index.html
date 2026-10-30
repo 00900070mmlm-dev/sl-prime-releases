@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SL PRIME</title>
+<!-- 웹(my.sl-edu.com/prime/)으로도 같은 파일을 연다 — 검색엔진에 안 잡히게, 폰 홈 화면에 앱처럼 추가되게.
+     Electron(file://)에서는 아래 태그들이 그냥 무시된다. -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#f5f5f7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="SL PRIME">
+<link rel="apple-touch-icon" href="assets/icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="data:image/png;base64,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">
+<!-- 폰트는 vendor/fonts 에 번들한다(구글에서 불러오지 않는다).
+     이유가 둘이다:
+      · 오프라인·file:// 에서도 같은 글꼴로 보여야 한다(vendor 라이브러리와 같은 원칙).
+      · 웹폰트로 불러온 Inter 와 한글 폴백(Noto Sans KR)은 Chromium 이 PDF 에 임베드하지 못한다.
+        인쇄소 입고 파일에서 폰트가 통째로 빠진다 — 실측 확인. 여기 파일은 TrueType(glyf) 이라 임베드된다. -->
+<script crossorigin src="vendor/react.production.min.js"></script>
+<script crossorigin src="vendor/react-dom.production.min.js"></script>
+<script src="vendor/babel.min.js"></script>
+<script src="vendor/supabase.js"></script>
+<script src="vendor/pdf.min.js"></script><!-- pdf.js — 모의고사 시험지 미리보기 렌더(내장 뷰어 플러그인 의존 없음) -->
+<script src="vendor/docx.iife.js"></script><!-- docx — 구클 진짜 .docx 내보내기(브라우저 IIFE 빌드, Node 의존 없음) -->
+<style>
+  /* 번들 폰트. 영문 Inter · 한글 Spoqa Han Sans Neo(Noto Sans KR 파생).
+     굵기는 Regular/Medium/SemiBold(=600)/Bold 만 넣었다 — 그 외 굵기는 Chromium 이 가까운 것을 쓴다. */
+  @font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: block; src: url('vendor/fonts/Inter-Regular.ttf') format('truetype'); }
+  @font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: block; src: url('vendor/fonts/Inter-Medium.ttf') format('truetype'); }
+  @font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: block; src: url('vendor/fonts/Inter-SemiBold.ttf') format('truetype'); }
+  @font-face { font-family: 'Inter'; font-style: normal; font-weight: 700; font-display: block; src: url('vendor/fonts/Inter-Bold.ttf') format('truetype'); }
+  @font-face { font-family: 'Spoqa Han Sans Neo'; font-style: normal; font-weight: 400; font-display: block; src: url('vendor/fonts/SpoqaHanSansNeo-Regular.ttf') format('truetype'); }
+  @font-face { font-family: 'Spoqa Han Sans Neo'; font-style: normal; font-weight: 500; font-display: block; src: url('vendor/fonts/SpoqaHanSansNeo-Medium.ttf') format('truetype'); }
+  @font-face { font-family: 'Spoqa Han Sans Neo'; font-style: normal; font-weight: 700; font-display: block; src: url('vendor/fonts/SpoqaHanSansNeo-Bold.ttf') format('truetype'); }
+  /* 주간테스트 표지 전용(선생님 이름·날짜) — 표지 디자인 글꼴. 필요한 글자만 남긴 부분집합(scripts/build-weekly-cover.py) */
+  @font-face { font-family: 'Pretendard WT'; font-style: normal; font-weight: 900; font-display: block; src: url('vendor/fonts/Pretendard-Black-sub.ttf') format('truetype'); }
+  @font-face { font-family: 'Pretendard WT'; font-style: normal; font-weight: 600; font-display: block; src: url('vendor/fonts/Pretendard-SemiBold-sub.ttf') format('truetype'); }
+  html, body { margin: 0; padding: 0; background: #f5f5f7; }
+  * { box-sizing: border-box; }
+  #root { min-height: 100vh; }
+  button { font-family: inherit; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.18); border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.30); background-clip: padding-box; }
+  .name-input { font-family: inherit; }
+  .name-input:focus { outline: none; }
+
+  /* ===== 모드 탭: Apple 리퀴드 글라스 스위처 ===== */
+  .lg-track { position: relative; display: flex; padding: 4px; border-radius: 9999px; background: rgba(0,0,0,0.06); }
+  .lg-thumb { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / var(--n, 3)); z-index: 0; pointer-events: none; transition: transform 0.5s cubic-bezier(0.34, 1.4, 0.5, 1); }
+  .lg-glass {
+    width: 100%; height: 100%; border-radius: 9999px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.78), rgba(255,255,255,0.52));
+    -webkit-backdrop-filter: blur(10px) saturate(180%); backdrop-filter: blur(10px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.7);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.14), inset 0 1px 1px rgba(255,255,255,0.95), inset 0 -3px 6px rgba(255,255,255,0.45);
+  }
+  .lg-seg {
+    position: relative; z-index: 1; flex: 1 1 0; border: none; background: transparent; cursor: pointer;
+    padding: 7px 8px; border-radius: 9999px; font-family: inherit; font-size: 14px; letter-spacing: -0.1px;
+    white-space: nowrap; transition: color 0.4s cubic-bezier(0.4,0,0.2,1);
+  }
+  .lg-sm .lg-seg, .lg-seg.lg-sm { font-size: 12.5px; padding: 7px 2px; letter-spacing: -0.3px; }
+
+  /* ===== 애니메이션 체크박스 (체크마크가 그려짐) ===== */
+  .cbx {
+    flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 5px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #ffffff; border: 1px solid #c7c7cc; background: rgba(255,255,255,0.85);
+    transition: background 0.35s cubic-bezier(0.4,0,0.2,1), border-color 0.35s cubic-bezier(0.4,0,0.2,1), transform 0.16s cubic-bezier(0.34,1.5,0.5,1);
+  }
+  .cbx[data-checked="true"] { background: #0066cc; border-color: #0066cc; }
+  .cbx svg { width: 12px; height: 12px; display: block; }
+  .cbx svg path {
+    stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0;
+    transition: stroke-dashoffset 0.25s ease, opacity 0.15s ease;
+  }
+  .cbx[data-checked="true"] svg path {
+    stroke-dashoffset: 0; opacity: 1;
+    transition: stroke-dashoffset 0.25s ease 0.15s, opacity 0.1s ease 0.15s;
+  }
+  /* 행(버튼) 호버·클릭 시 체크박스가 살짝 커졌다 눌림 */
+  button:hover > .cbx { transform: scale(1.08); }
+  button:active > .cbx { transform: scale(0.94); }
+
+  /* ===== 모의고사 번호 칩: 체크박스와 같은 모션 (숫자 pop + 파란 채움) ===== */
+  .num-chip {
+    flex: none; min-width: 36px; padding: 6px 5px; text-align: center; border-radius: 8px;
+    font-size: 13px; font-family: inherit; cursor: pointer; font-weight: 400;
+    border: 1px solid #d2d2d7; background: rgba(255,255,255,0.8); color: #1d1d1f;
+    transition: background 0.32s cubic-bezier(0.4,0,0.2,1), border-color 0.32s cubic-bezier(0.4,0,0.2,1), color 0.2s ease, transform 0.16s cubic-bezier(0.34,1.5,0.5,1);
+  }
+  .num-chip[data-sel="true"] { background: #0066cc; border-color: #0066cc; color: #ffffff; font-weight: 600; }
+  .num-chip:hover { transform: scale(1.08); }
+  .num-chip:active { transform: scale(0.94); }
+  .num-chip .num { display: inline-block; }
+  .num-chip[data-sel="true"] .num { animation: numPop 0.35s cubic-bezier(0.34,1.5,0.5,1); }
+  @keyframes numPop {
+    0% { transform: scale(0.5); }
+    60% { transform: scale(1.18); }
+    100% { transform: scale(1); }
+  }
+
+  /* ===== 학년·연도 칩: 같은 모션 (라벨 pop + 파란 채움 + 스케일) ===== */
+  .sel-chip {
+    flex: 1; cursor: pointer; border-radius: 9999px; padding: 6px 0; text-align: center;
+    font-size: 13px; font-family: inherit; letter-spacing: -0.1px; font-weight: 400;
+    border: 1px solid #d2d2d7; background: rgba(255,255,255,0.6); color: #1d1d1f;
+    transition: background 0.32s cubic-bezier(0.4,0,0.2,1), border-color 0.32s cubic-bezier(0.4,0,0.2,1), color 0.2s ease, transform 0.18s cubic-bezier(0.34,1.25,0.6,1);
+  }
+  .sel-chip[data-sel="true"] { background: rgba(0,102,204,0.10); border-color: rgba(0,102,204,0.40); color: #0066cc; font-weight: 600; }
+  .sel-chip:hover { transform: scale(1.04); }
+  .sel-chip:active { transform: scale(0.95); }
+  .sel-chip .lbl { display: inline-block; }
+  .sel-chip[data-sel="true"] .lbl { animation: chipPop 0.3s cubic-bezier(0.34,1.25,0.6,1); }
+  @keyframes chipPop {
+    0% { transform: scale(0.9); }
+    55% { transform: scale(1.06); }
+    100% { transform: scale(1); }
+  }
+
+  /* ===== 개발중 안내 모달 ===== */
+  .wip-backdrop { animation: wipFade 0.18s ease; }
+  .wip-card { animation: wipPop 0.24s cubic-bezier(0.34,1.4,0.5,1); }
+  @keyframes wipFade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes wipPop { 0% { opacity: 0; transform: scale(0.9) translateY(8px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+
+  /* ===== 저장 버튼: 평소 원래색 → 호버 시 파란색 + 광택 스윕 + 글로우 + lift ===== */
+  .export-btn {
+    position: relative; overflow: hidden; border-radius: 9px; padding: 0 16px; height: 36px;
+    font-size: 13px; font-weight: 500; font-family: inherit; letter-spacing: -0.1px; cursor: pointer;
+    transition: background 0.5s cubic-bezier(0.4,0,0.2,1), color 0.4s ease, border-color 0.5s cubic-bezier(0.4,0,0.2,1), box-shadow 0.7s ease, transform 0.2s cubic-bezier(0.34,1.4,0.5,1);
+  }
+  .export-btn.secondary { border: 1px solid #d2d2d7; background: rgba(255,255,255,0.7); color: #1d1d1f; }
+  /* 광택 스윕 */
+  .export-btn::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(120deg, transparent 15%, rgba(255,255,255,0.30) 50%, transparent 85%);
+    transform: translateX(-130%);
+  }
+  .export-btn:hover::before { transform: translateX(130%); transition: transform 1.25s ease; }
+  /* 호버: 파란색 + 살짝 떠오름 + 확대 + 은은한 글로우 */
+  .export-btn:hover {
+    background: var(--hc, #0066cc); border-color: var(--hc, #0066cc); color: #ffffff;
+    transform: translateY(-2px) scale(1.03); box-shadow: 0 8px 26px var(--hc-glow, rgba(0,102,204,0.22));
+  }
+  .export-btn:active { transform: translateY(0) scale(0.96); box-shadow: 0 2px 8px var(--hc-glow, rgba(0,102,204,0.3)); }
+  .export-btn > span { position: relative; z-index: 1; }
+
+  /* ===== 전체 선택 토글 스위치: 같은 탄성 모션 ===== */
+  .sw-track {
+    flex: none; display: inline-block; width: 38px; height: 22px; border-radius: 9999px;
+    background: rgba(0,0,0,0.16); position: relative;
+    transition: background 0.32s cubic-bezier(0.4,0,0.2,1), transform 0.16s cubic-bezier(0.34,1.5,0.5,1);
+  }
+  .sw-track[data-on="true"] { background: #0066cc; }
+  .sw-knob {
+    position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+    background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    transition: left 0.34s cubic-bezier(0.34,1.45,0.5,1);
+  }
+  .sw-track[data-on="true"] .sw-knob { left: 18px; animation: knobPop 0.36s cubic-bezier(0.34,1.5,0.5,1); }
+  button:hover .sw-track { transform: scale(1.08); }
+  button:active .sw-track { transform: scale(0.94); }
+  @keyframes knobPop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.22); }
+    100% { transform: scale(1); }
+  }
+
+  /* ===== 로그인 화면 ===== */
+  .login-input {
+    width: 100%; height: 46px; border-radius: 12px; padding: 0 15px; box-sizing: border-box;
+    font-family: inherit; font-size: 15px; letter-spacing: -0.1px; outline: none;
+    border: 1.5px solid #d2d2d7; background: rgba(255,255,255,0.7); color: #1d1d1f;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  }
+  .login-input::placeholder { color: #a0a0a8; }
+  .login-input:focus { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); background: #ffffff; }
+  .dark .login-input { border-color: rgba(255,255,255,0.16); background: rgba(255,255,255,0.06); color: #ececed; }
+  .dark .login-input::placeholder { color: #7a7a83; }
+  .dark .login-input:focus { border-color: #4da3ff; box-shadow: 0 0 0 3px rgba(77,163,255,0.18); background: rgba(255,255,255,0.1); }
+  .login-btn {
+    width: 100%; height: 47px; border: none; border-radius: 12px; margin-top: 4px;
+    background: #0066cc; color: #ffffff; font-family: inherit; font-size: 15px; font-weight: 600; letter-spacing: -0.2px;
+    cursor: pointer; position: relative; overflow: hidden;
+    transition: transform 0.18s cubic-bezier(0.34,1.4,0.5,1), box-shadow 0.35s ease;
+  }
+  .login-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,102,204,0.38); }
+  .login-btn:active { transform: translateY(0) scale(0.99); }
+  .login-btn > span { position: relative; z-index: 1; }
+
+  /* ===== 야간모드: 클래스 컴포넌트 색 보정 (워크시트 종이는 제외) ===== */
+  .dark .lg-track { background: rgba(255,255,255,0.08); }
+  .dark .lg-glass {
+    background: linear-gradient(180deg, rgba(120,122,132,0.34), rgba(96,98,108,0.26));
+    border-color: rgba(255,255,255,0.14);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.45), inset 0 1px 1px rgba(255,255,255,0.18);
+  }
+  .dark .cbx { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.28); }
+  .dark .sel-chip { border-color: rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: #ececed; }
+  .dark .sel-chip[data-sel="true"] { background: rgba(77,159,255,0.18); border-color: rgba(77,159,255,0.45); color: #4d9fff; }
+  .dark .num-chip { border-color: rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: #ececed; }
+  .dark .num-chip[data-sel="true"] { background: #0066cc; border-color: #0066cc; color: #ffffff; }
+  .dark .export-btn.secondary { border-color: rgba(255,255,255,0.16); background: rgba(255,255,255,0.08); color: #ececed; }
+  /* 다크에서도 호버 색(Word 파랑·PDF 빨강·TXT 블랙)이 그대로 적용되도록 명시도 보강 */
+  .dark .export-btn.secondary:hover {
+    background: var(--hc, #0066cc); border-color: var(--hc, #0066cc); color: #ffffff;
+  }
+  .dark .sw-track { background: rgba(255,255,255,0.18); }
+  .dark .sw-track[data-on="true"] { background: #2f8fff; }
+  .dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.22); background-clip: padding-box; }
+  .dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.34); background-clip: padding-box; }
+
+  /* ===== 폰(760px 이하): 두 단 레이아웃을 세로로 쌓는다 =====
+     앱은 인라인 스타일이라 화면마다 고칠 수 없다 — 셸이 쓰는 data 속성에 걸어 한 번에 바꾼다.
+       [data-root]   앱 바깥 상자(height 100vh·overflow hidden) → 높이를 풀어 문서 전체가 스크롤되게
+       [data-row]    지문 스튜디오의 사이드바+본문 가로 행 → 세로
+       [data-mstack] 그 밖의 앱이 가로로 둔 행(모의고사·주간테스트 관리) → 세로
+       [data-mpane]  그 행의 고정 폭 왼쪽 판 → 전체 폭, 높이 상한
+       [data-mhide]  폰에서 뜻이 없는 것(전체명단 돋보기 — 핀치 줌이 있다)
+     !important 는 인라인 스타일을 이기기 위한 것이다. 인쇄 CSS 와는 별개(아래). */
+  @media (max-width: 760px) {
+    [data-root] { height: auto !important; min-height: 100vh; min-height: 100dvh; overflow: visible !important; }
+    /* 배경 블러 덩어리(빈 div, 화면 밖까지 퍼짐)는 overflow hidden 이 잘라 주던 것 — 풀었으니 폰에서는 안 그린다.
+       안 그러면 그 덩어리 폭만큼 문서가 넓어져 폰이 화면을 축소한다(실측 390 → 621px). */
+    [data-root] > div[data-noprint]:empty { display: none !important; }
+    [data-root] > nav { padding: 0 14px !important; }
+    [data-row], [data-mstack] { flex-direction: column !important; }
+    [data-row] > aside, [data-mstack] > [data-mpane] { width: auto !important; flex: none !important; margin: 12px 12px 0 !important; max-height: 55vh; }
+    [data-row] > main > [data-noprint]:first-child { margin: 12px 12px 0 !important; }   /* 지문 스튜디오 툴바 */
+    [data-scroll] { padding: 16px 12px 40px !important; }
+    [data-mhide] { display: none !important; }
+    .nav-brand { display: none !important; }   /* 좁은 머리글엔 앱 이름만 — 'SL PRIME' 은 뺀다 */
+    [data-mstack] { align-items: stretch !important; }   /* flex-start 면 세로로 쌓인 판이 내용 폭(max-content)으로 넓어진다 */
+    [data-mstack] > * { width: auto !important; max-width: none !important; flex: none !important; min-width: 0 !important; }
+    /* 글라스 트랙(모드 n × 84px 고정 폭)은 폰에서 줄바꿈 칩 줄이 된다 — 알약은 숨기고 고른 것은 색·굵기(인라인)로 안다 */
+    .lg-track { width: auto !important; flex-wrap: wrap; border-radius: 14px; }
+    .lg-thumb { display: none !important; }
+    .lg-seg { flex: 0 0 auto !important; padding: 7px 12px !important; border-radius: 9999px; }
+    .lg-seg[style*="font-weight: 600"] { background: rgba(0,102,204,0.12); }
+    .dark .lg-seg[style*="font-weight: 600"] { background: rgba(77,163,255,0.2); }
+    /* 칩·버튼 글자가 세로로 떨어지지 않게 — 줄 안에서 줄어들지 말고 다음 줄로 내려간다(행·카드형 버튼은 div 를 품으니 제외) */
+    button:not(:has(div)) { white-space: nowrap; }
+    /* 모의고사 미리보기(pdf.js 캔버스, 794px) → 화면 폭 */
+    canvas[style*="794px"] { width: 100% !important; height: auto !important; }
+    /* iOS 는 16px 미만 입력란에 들어가면 화면을 확대한다 */
+    .login-input, input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px !important; }
+    ::-webkit-scrollbar { width: 0; height: 0; }
+  }
+
+  /* 인쇄/PDF: 각 워크시트 박스(794×1123=A4)를 그대로 한 페이지로 → 벡터, 화면과 1:1 */
+  @page { size: A4; margin: 0; }
+  @media print {
+    html, body { background: #fff !important; }
+    [data-noprint] { display: none !important; }
+    [data-root], [data-row], [data-main], [data-scroll] {
+      display: block !important; height: auto !important; overflow: visible !important;
+      padding: 0 !important; margin: 0 !important; background: #fff !important;
+    }
+    /* 여백(padding)은 화면 인라인 스타일을 그대로 쓴다 — 여기서 덮어쓰지 말 것 */
+    [data-sheet] {
+      box-shadow: none !important; border: none !important; border-radius: 0 !important;
+      width: 210mm !important; height: 297mm !important; min-height: 0 !important;
+      margin: 0 !important; overflow: hidden !important;
+      page-break-after: always; break-after: page;
+    }
+    [data-sheet]:last-child { page-break-after: auto; break-after: auto; }
+    [data-sheet] { zoom: 1 !important; }   /* 폰에서 화면 맞춤으로 줄인 zoom(mobileFitSheets)은 인쇄에 안 가져간다 */
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+  // Force the classic JSX runtime — @babel/standalone's "react" preset now
+  // defaults to the automatic runtime, which emits bare `import ... from
+  // "react/jsx-runtime"` that a plain <script> can't resolve in the browser.
+  Babel.registerPreset('react-classic', {
+    presets: [[Babel.availablePresets['react'], { runtime: 'classic' }]]
+  });
+</script>
+<!-- 앱 본체: src/ 아래 기능별 파일로 분리(빌드 없음 — Babel standalone이 순서대로 컴파일). 로드 순서 변경 금지 -->
+<script type="text/babel" data-presets="react-classic" src="src/01-core.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/02-workbook.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/03-lib.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/04-studio.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/05-colorpicker.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/06-login.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/07-home.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/09-mockexam.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/10-illust.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/11-docx.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/13-weekly.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/14-booking.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/15-roster.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/16-wtadmin.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/17-hwpx.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/18-hwpxai.js"></script>
+<script type="text/babel" data-presets="react-classic" src="src/08-root.js"></script>
+</body>
+</html>
