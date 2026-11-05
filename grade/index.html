@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>SL PRIME 주간테스트 채점</title>
+<meta property="og:title" content="SL PRIME 주간테스트 채점">
+<meta property="og:description" content="이름과 전화번호를 넣고 이번 주 주간테스트를 채점해 보세요.">
+<!--
+  학생용 주간테스트 채점 페이지 (공개). 앱(app/)과 별개로 GitHub Pages 에 올라간다
+  (.github/workflows/release-web.yml 이 web/ 전체를 올린다 — 학부모용 예약은 /booking/).
+
+  흐름: 이름+비밀번호(숫자 4자리) → 시험 고르기 → ①~⑤ 로 답 적기 → 채점
+        → 틀린 것 다시 풀어보기 · 시험지 · 해설지 (인쇄·PDF)
+  처음 비밀번호는 **학생 본인 전화번호 뒷 4자리**이고 여기서 바꿀 수 있다(grade_setpw).
+
+  Supabase 는 anon 키로 RPC 네 개(grade_start·sheet·submit·mine)만 부른다.
+  **정답은 내려오지 않는다** — 채점은 서버가 하고 틀린 문항만 돌려준다.
+  의존성 없음(순수 JS) — 문자로 받은 링크를 폰에서 열었을 때 빨리 떠야 한다.
+-->
+<style>
+  :root {
+    --bg: #f5f5f7; --card: #ffffff; --text: #1d1d1f; --dim: #6e6e73; --faint: #a1a1a6;
+    --line: rgba(0,0,0,0.08); --accent: #0066cc; --accent-bg: rgba(0,102,204,0.08);
+    --err: #d70015; --err-bg: rgba(215,0,21,0.07); --ok: #1a7f37; --ok-bg: rgba(26,127,55,0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000; --card: #1c1c1e; --text: #f5f5f7; --dim: #a1a1a6; --faint: #6e6e73;
+      --line: rgba(255,255,255,0.1); --accent: #0a84ff; --accent-bg: rgba(10,132,255,0.16);
+      --err: #ff453a; --err-bg: rgba(255,69,58,0.12); --ok: #30d158; --ok-bg: rgba(48,209,88,0.12);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; word-break: keep-all; overflow-wrap: anywhere; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; line-height: 1.5; }
+  main { max-width: 520px; margin: 0 auto; padding: 20px 16px calc(40px + env(safe-area-inset-bottom)); }
+  .brand { font-size: 13px; font-weight: 700; letter-spacing: 0.4px; color: var(--accent); margin: 4px 2px 10px; }
+  h1 { font-size: 24px; line-height: 1.3; margin: 0 2px 6px; letter-spacing: -0.3px; }
+  .sub { color: var(--dim); font-size: 15px; margin: 0 2px 18px; }
+  .card { background: var(--card); border-radius: 18px; padding: 18px 16px; margin-bottom: 14px; }
+  label.f { display: block; margin-bottom: 12px; }
+  label.f span { display: block; font-size: 13px; color: var(--dim); margin-bottom: 5px; }
+  input[type=text], input[type=tel], input[type=password] { width: 100%; padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px;
+    font: inherit; font-size: 16px; background: var(--bg); color: var(--text); }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button { font: inherit; cursor: pointer; }
+  .go { width: 100%; padding: 15px; border: none; border-radius: 14px; background: var(--accent); color: #fff;
+    font-size: 16px; font-weight: 700; }
+  .go[disabled] { opacity: 0.5; }
+  .ghost { padding: 10px 16px; border: 1px solid var(--line); border-radius: 9999px; background: transparent; color: var(--text); font-size: 14px; }
+  .msg { padding: 12px 14px; border-radius: 12px; font-size: 14.5px; margin-bottom: 12px; }
+  .msg.err { background: var(--err-bg); color: var(--err); }
+  .msg.ok { background: var(--ok-bg); color: var(--ok); }
+  .tests { display: flex; flex-direction: column; gap: 8px; }
+  .test { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 14px;
+    border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--text); }
+  .test b { font-size: 16px; }
+  .test .m { font-size: 13px; color: var(--dim); }
+  .test .done { margin-left: auto; font-size: 12px; color: var(--ok); font-weight: 700; flex: none; }
+  .test .go2 { margin-left: auto; color: var(--faint); flex: none; }
+  .qs { display: flex; flex-direction: column; gap: 10px; }
+  .q { display: flex; align-items: center; gap: 8px; }
+  .q .n { flex: none; width: 30px; text-align: right; font-size: 15px; font-weight: 700; color: var(--dim); }
+  .q .n .mt { display: block; font-size: 10px; line-height: 1.2; color: var(--accent); }
+  .q .opts { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .q .opts button { padding: 11px 0; border: 1px solid var(--line); border-radius: 11px; background: var(--card);
+    color: var(--text); font-size: 15px; }
+  .q .opts button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  .bar { position: sticky; bottom: 0; padding: 12px 0 calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--bg) 70%, transparent); }
+  .score { text-align: center; padding: 10px 0 4px; }
+  .score .big { font-size: 46px; font-weight: 800; letter-spacing: -1px; }
+  .score .of { color: var(--dim); font-size: 15px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip { padding: 5px 11px; border-radius: 9999px; background: var(--accent-bg); color: var(--accent); font-size: 13px; font-weight: 600; }
+  .wrongno { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .wrongno span { min-width: 32px; text-align: center; padding: 5px 8px; border-radius: 9px; background: var(--err-bg); color: var(--err); font-weight: 700; font-size: 14px; }
+  .nt { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+  .nt:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+  .nt .head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .nt .head b { font-size: 16px; }
+  .nt .src { font-size: 12px; color: var(--faint); }
+  .nt .stem { font-size: 15px; margin-bottom: 8px; }
+  .nt .psg { font-size: 14px; color: var(--dim); background: var(--bg); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; white-space: pre-wrap; }
+  .nt ol { margin: 0 0 8px; padding-left: 20px; font-size: 14.5px; }
+  .nt ol li { margin-bottom: 2px; }
+  .nt ol li.a { color: var(--ok); font-weight: 700; }
+  .nt ol li.x { color: var(--err); text-decoration: line-through; }
+  .nt .exp { font-size: 14px; color: var(--dim); background: var(--bg); border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; }
+  .foot { text-align: center; color: var(--faint); font-size: 12px; margin-top: 18px; }
+  /* ── 시험지 양식 — app/src/13-weekly.js 의 WT_CSS 와 같은 값. 화면은 1단, 인쇄는 2단. ── */
+  .wt { color: #000; background: #fff; font-family: 'Times New Roman', Batang, 'Noto Serif KR', serif;
+    font-size: 13.4px; line-height: 1.62; word-break: keep-all; overflow-wrap: break-word;
+    border-radius: 14px; padding: 16px 14px; }
+  .wt-head { border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 14px; }
+  .wt-h1 { font-family: 'Malgun Gothic', sans-serif; font-size: 13px; }
+  .wt-h2 { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+  .wt-area { font-family: 'Malgun Gothic', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+  .wt-cap { font-family: 'Malgun Gothic', sans-serif; font-size: 12px; border: 1px solid #000; border-radius: 9999px; padding: 2px 9px; }
+  .wt-who { font-family: 'Malgun Gothic', sans-serif; font-size: 12px; margin-top: 4px; }
+  .wt-item { padding-bottom: 22px; break-inside: avoid-column; }
+  .wt-lead { font-size: 13.6px; line-height: 1.5; margin-bottom: 6px; }
+  .wt-arrow { text-align: center; margin: 4px 0; }
+  .wt-stem { font-size: 13.6px; line-height: 1.5; margin-bottom: 6px; }
+  .wt-stem b { font-family: 'Malgun Gothic', sans-serif; font-weight: 700; margin-right: 4px; }
+  .wt-given { border: 1px solid #000; padding: 6px 8px; text-align: justify; margin: 0 0 6px; white-space: pre-wrap; }
+  .wt-psg { text-align: justify; padding-left: 6px; }
+  .wt-part { text-align: justify; margin-top: 5px; padding-left: 6px; }
+  .wt-part b { font-weight: 400; margin-right: 4px; }
+  .wt-u { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  .wt-cn { margin-right: 1px; }
+  .wt-ins { font-weight: 700; white-space: nowrap; }
+  .wt-ch { margin-top: 6px; padding-left: 6px; }
+  .wt-ch div { padding-left: 1.25em; text-indent: -1.25em; }
+  .wt-ch.grid { display: flex; flex-wrap: wrap; }
+  .wt-ch.grid div { width: 50%; }
+  .wt-ans table { border-collapse: collapse; margin-bottom: 8px; font-size: 12.5px; }
+  .wt-ans th, .wt-ans td { border: 1px solid #000; padding: 3px 8px; text-align: center; min-width: 26px; }
+  .wt-ans th { font-family: 'Malgun Gothic', sans-serif; font-weight: 700; background: #f2f2f2; }
+  .wt-ans td.x { color: #d70015; font-weight: 700; }
+  .wt-exp { margin-bottom: 10px; font-size: 12.8px; line-height: 1.6; }
+  .wt-exp b { font-family: 'Malgun Gothic', sans-serif; }
+  .wt-exp.wrong { border-left: 3px solid #d70015; padding-left: 8px; }
+  .wt-kt { font-family: 'Malgun Gothic', sans-serif; font-size: 11.5px; }
+  .wt-ka { font-family: 'Malgun Gothic', sans-serif; font-weight: 700; }
+  @media print {
+    @page { size: A4; margin: 14mm 12mm; }
+    .wt { padding: 0; font-size: 12.4px; }
+    .wt-lead, .wt-stem { font-size: 12.6px; }
+    .wt-body { column-count: 2; column-gap: 26px; column-rule: 1px solid #000; }
+    .wt-ans table { font-size: 11.5px; }
+    .wt-exp { font-size: 11.8px; }
+    body { background: #fff; color: #000; }
+    .noprint { display: none !important; }
+    main { max-width: none; padding: 0; }
+    .card { border-radius: 0; padding: 0; margin: 0 0 10px; }
+    .nt { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand noprint">SL PRIME</div>
+  <div id="app"></div>
+  <div class="foot noprint">문의는 학원으로 연락해 주세요.</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var SUPA_URL = 'https://lfrawudhoppvvwktqbvg.supabase.co';
+  var SUPA_KEY = 'sb_publishable_tagOfpNlqNEXldBIPYqEvw_q0amXG8x';  // 공개용 키(앱과 같음). RLS·RPC 로 보호
+  var CIRC = ['①', '②', '③', '④', '⑤'];
+  // 정답 값 → 동그라미. 복수정답은 번호를 이어 붙인 값이다(35 → ③⑤) — 앱의 wtCirc 와 같은 규칙.
+  function circ(a) { return String(a || '').split('').map(function (d) { return CIRC[Number(d) - 1] || ''; }).join(''); }
+  var app = document.getElementById('app');
+  var S = { token: null, name: '', tests: [], test: null, answers: [], result: null, papers: null, defaultPw: false };
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function rpc(name, args) {
+    return fetch(SUPA_URL + '/rest/v1/rpc/' + name, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY, Authorization: 'Bearer ' + SUPA_KEY },
+      body: JSON.stringify(args || {})
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        var d = null;
+        try { d = t ? JSON.parse(t) : null; } catch (e) {}
+        if (!r.ok) throw new Error((d && (d.message || d.hint)) || ('오류 ' + r.status));
+        return d;
+      });
+    });
+  }
+  var CIRC = ['①', '②', '③', '④', '⑤'];
+  // 1·2월은 전년도 학년도다 (앱의 wtDateTitle 과 같은 규칙)
+  function yearOf(ymd) {
+    var p2 = String(ymd || '').split('-');
+    if (p2.length !== 3) return new Date().getFullYear();
+    return Number(p2[1]) <= 2 ? Number(p2[0]) - 1 : Number(p2[0]);
+  }
+  function weekName(ymd) {
+    var p = String(ymd || '').split('-');
+    if (p.length !== 3) return ymd || '';
+    return Number(p[1]) + '월 ' + (Math.floor((Number(p[2]) - 1) / 7) + 1) + '주';
+  }
+  function show(err, cls) {
+    var m = el('div', 'msg ' + (cls || 'err'), err);
+    app.insertBefore(m, app.firstChild);
+    window.scrollTo(0, 0);
+  }
+
+  // ── ① 이름·비밀번호(숫자 4자리) ──────────────────────────────
+  function viewLogin(msg) {
+    app.innerHTML = '';
+    app.appendChild(el('h1', null, '주간테스트 채점'));
+    app.appendChild(el('p', 'sub', '이름과 비밀번호를 넣으면 이번 주 시험을 채점할 수 있어요.'));
+    if (msg) show(msg);
+    var card = el('div', 'card');
+    var l1 = el('label', 'f'); l1.appendChild(el('span', null, '이름'));
+    var i1 = el('input'); i1.type = 'text'; i1.autocomplete = 'name'; i1.placeholder = '홍길동'; l1.appendChild(i1);
+    var l2 = el('label', 'f'); l2.appendChild(el('span', null, '비밀번호 (숫자 4자리)'));
+    var i2 = el('input'); i2.type = 'password'; i2.inputMode = 'numeric'; i2.maxLength = 4;
+    i2.autocomplete = 'current-password'; i2.placeholder = '••••'; l2.appendChild(i2);
+    var hint = el('p', 'note', '처음 비밀번호는 전화번호 뒷 4자리예요.');
+    hint.style.cssText = 'margin:-4px 2px 12px;font-size:12.5px';
+    var go = el('button', 'go', '시작하기');
+    card.appendChild(l1); card.appendChild(l2); card.appendChild(hint); card.appendChild(go);
+    app.appendChild(card);
+
+    function submit() {
+      var name = i1.value.trim(), pw = i2.value.trim();
+      if (!name || !/^[0-9]{4}$/.test(pw)) { show('이름과 비밀번호 숫자 4자리를 넣어 주세요.'); return; }
+      go.disabled = true; go.textContent = '확인 중…';
+      rpc('grade_start', { p_name: name, p_pw: pw }).then(function (d) {
+        S.token = d.token; S.name = d.name; S.tests = d.tests || []; S.defaultPw = !!d.default_pw;
+        viewTests();
+      }).catch(function (e) {
+        go.disabled = false; go.textContent = '시작하기';
+        show(e.message);
+      });
+    }
+    go.addEventListener('click', submit);
+    i2.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    i1.focus();
+  }
+
+  // ── ② 시험 고르기 ────────────────────────────────────────────
+  function viewTests() {
+    app.innerHTML = '';
+    app.appendChild(el('h1', null, S.name + '님'));
+    app.appendChild(el('p', 'sub', '채점할 주간테스트를 고르세요.'));
+    // 아직 전화번호 뒷 4자리를 쓰고 있으면 한 번 짚어 준다(강요하지는 않는다)
+    if (S.defaultPw) show('비밀번호가 전화번호 뒷 4자리예요. 아래에서 바꿔 두세요.', 'ok');
+    var card = el('div', 'card');
+    if (!S.tests.length) {
+      card.appendChild(el('p', 'note', '아직 채점할 수 있는 시험지가 없습니다. 선생님이 등록하면 여기에 나타나요.'));
+    } else {
+      var list = el('div', 'tests');
+      S.tests.forEach(function (t) {
+        var b = el('button', 'test');
+        var box = el('div');
+        box.appendChild(el('b', null, weekName(t.week_start) + ' 주간테스트'));
+        box.appendChild(el('div', 'm', t.item_count + '문항' + (t.teacher ? ' · ' + t.teacher + 'T' : '')));
+        b.appendChild(box);
+        b.appendChild(el('span', t.done ? 'done' : 'go2', t.done ? '채점함' : '›'));
+        b.addEventListener('click', function () { openTest(t); });
+        list.appendChild(b);
+      });
+      card.appendChild(list);
+    }
+    app.appendChild(card);
+
+    var pw = el('button', 'ghost', '비밀번호 바꾸기');
+    pw.addEventListener('click', viewPw);
+    app.appendChild(pw);
+  }
+
+  // ── 비밀번호 바꾸기 (숫자 4자리) ──────────────────────────────
+  function viewPw() {
+    app.innerHTML = '';
+    app.appendChild(el('h1', null, '비밀번호 바꾸기'));
+    app.appendChild(el('p', 'sub', '숫자 4자리로 정해 주세요.'));
+    var card = el('div', 'card');
+    var l1 = el('label', 'f'); l1.appendChild(el('span', null, '새 비밀번호'));
+    var i1 = el('input'); i1.type = 'password'; i1.inputMode = 'numeric'; i1.maxLength = 4; i1.autocomplete = 'new-password'; i1.placeholder = '••••';
+    l1.appendChild(i1);
+    var l2 = el('label', 'f'); l2.appendChild(el('span', null, '한 번 더'));
+    var i2 = el('input'); i2.type = 'password'; i2.inputMode = 'numeric'; i2.maxLength = 4; i2.autocomplete = 'new-password'; i2.placeholder = '••••';
+    l2.appendChild(i2);
+    var go = el('button', 'go', '바꾸기');
+    card.appendChild(l1); card.appendChild(l2); card.appendChild(go);
+    app.appendChild(card);
+
+    var back = el('button', 'ghost', '← 돌아가기');
+    back.addEventListener('click', viewTests);
+    app.appendChild(back);
+
+    function submit() {
+      var a = i1.value.trim(), b = i2.value.trim();
+      if (!/^[0-9]{4}$/.test(a)) return show('숫자 4자리로 넣어 주세요.');
+      if (a !== b) return show('두 번 넣은 비밀번호가 다릅니다.');
+      go.disabled = true; go.textContent = '바꾸는 중…';
+      rpc('grade_setpw', { p_token: S.token, p_new: a }).then(function () {
+        S.defaultPw = false;
+        viewTests();
+        show('비밀번호를 바꿨습니다.', 'ok');
+      }).catch(function (e) {
+        go.disabled = false; go.textContent = '바꾸기';
+        show(e.message);
+      });
+    }
+    go.addEventListener('click', submit);
+    i2.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    i1.focus();
+  }
+
+  function openTest(t) {
+    S.test = t;
+    if (t.done) {
+      rpc('grade_mine', { p_token: S.token, p_test: t.id }).then(function (d) {
+        S.result = { score: d.score, wrong: d.wrong || [], total: t.item_count,
+          right: Math.round((d.score || 0) * t.item_count / 100) };
+        viewResult(true);
+      }).catch(function (e) { show(e.message); });
+      return;
+    }
+    S.answers = new Array(t.item_count).fill(0);
+    S.multi = t.multi || [];   // 여러 개를 고르는 문항 번호(복수정답) — grade_start 가 시험지 목록에 실어 준다
+    viewSheet();
+  }
+
+  // ── ③ 답 적기 ────────────────────────────────────────────────
+  function viewSheet() {
+    app.innerHTML = '';
+    var t = S.test;
+    app.appendChild(el('h1', null, weekName(t.week_start) + ' 주간테스트'));
+    app.appendChild(el('p', 'sub', t.item_count + '문항 · 고른 답을 눌러 주세요.'));
+    var card = el('div', 'card');
+    var qs = el('div', 'qs');
+    for (var i = 0; i < t.item_count; i++) {
+      (function (idx) {
+        var row = el('div', 'q');
+        var multi = (S.multi || []).indexOf(idx + 1) >= 0;
+        var nEl = el('div', 'n', String(idx + 1));
+        if (multi) nEl.appendChild(el('span', 'mt', '모두'));   // 정답을 모두 고르는 문항
+        row.appendChild(nEl);
+        var opts = el('div', 'opts');
+        for (var k = 1; k <= 5; k++) {
+          (function (num) {
+            var b = el('button', null, CIRC[num - 1]);
+            b.setAttribute('aria-pressed', 'false');
+            b.addEventListener('click', function () {
+              // 복수정답 문항(multi)은 여러 개를 고른다 — 고른 번호를 작은 것부터 이어 붙여 보낸다(③⑤ → 35).
+              // 서버는 '학생 답 = 정답' 으로만 비교하므로 정답을 전부, 그것만 골라야 맞는다.
+              if (multi) {
+                var cur = String(S.answers[idx] || '').split('').filter(Boolean).map(Number);
+                cur = cur.indexOf(num) >= 0 ? cur.filter(function (x) { return x !== num; }) : cur.concat(num);
+                S.answers[idx] = cur.length ? Number(cur.sort().join('')) : 0;
+              } else {
+                S.answers[idx] = (S.answers[idx] === num) ? 0 : num;
+              }
+              var on = String(S.answers[idx] || '');
+              Array.prototype.forEach.call(opts.children, function (c, j) {
+                c.setAttribute('aria-pressed', String(on.indexOf(String(j + 1)) >= 0));
+              });
+              refresh();
+            });
+            opts.appendChild(b);
+          })(k);
+        }
+        row.appendChild(opts);
+        qs.appendChild(row);
+      })(i);
+    }
+    card.appendChild(qs);
+    app.appendChild(card);
+
+    var bar = el('div', 'bar');
+    var go = el('button', 'go', '채점하기');
+    bar.appendChild(go);
+    app.appendChild(bar);
+    var back = el('button', 'ghost', '← 다른 시험 고르기');
+    back.style.marginTop = '10px';
+    back.addEventListener('click', viewTests);
+    app.appendChild(back);
+
+    function refresh() {
+      var done = S.answers.filter(function (x) { return x; }).length;
+      go.textContent = done < t.item_count ? ('채점하기 (' + done + '/' + t.item_count + ')') : '채점하기';
+      go.disabled = done === 0;
+    }
+    refresh();
+
+    go.addEventListener('click', function () {
+      var blank = [];
+      S.answers.forEach(function (v, i) { if (!v) blank.push(i + 1); });
+      if (blank.length && !window.confirm(blank.join(', ') + '번을 아직 안 골랐어요. 그대로 채점할까요?')) return;
+      go.disabled = true; go.textContent = '채점 중…';
+      rpc('grade_submit', { p_token: S.token, p_test: t.id, p_answers: S.answers }).then(function (d) {
+        S.result = d;
+        viewResult(false);
+      }).catch(function (e) {
+        go.disabled = false; refresh();
+        show(e.message);
+      });
+    });
+  }
+
+  // ── ④ 결과 · 오답노트 ────────────────────────────────────────
+  // ── ④ 결과 ───────────────────────────────────────────────────
+  function viewResult(again) {
+    app.innerHTML = '';
+    var t = S.test, r = S.result, wrong = r.wrong || [];
+
+    // '다른 시험 채점하기' 는 **맨 위**에 둔다(사장님 2026-10-23) —
+    // 결과가 길어서 맨 아래에 있으면 한참 내려야 보인다.
+    var back = el('button', 'ghost noprint', '← 다른 시험 채점하기');
+    back.style.cssText = 'margin:0 0 12px';
+    back.addEventListener('click', function () {
+      S.tests.forEach(function (x) { if (x.id === t.id) x.done = true; });
+      S.papers = null;
+      viewTests();
+    });
+    app.appendChild(back);
+
+    var head = el('div', 'noprint');
+    head.appendChild(el('h1', null, weekName(t.week_start) + ' 주간테스트'));
+    head.appendChild(el('p', 'sub', S.name + '님' + (again ? ' · 지난 채점 결과' : '')));
+    app.appendChild(head);
+
+    var sc = el('div', 'card');
+    var box = el('div', 'score');
+    var big = el('div', 'big', String(r.score != null ? r.score : '-'));
+    big.style.color = (r.score >= 80) ? 'var(--ok)' : (r.score < 60 ? 'var(--err)' : 'var(--text)');
+    box.appendChild(big);
+    box.appendChild(el('div', 'of', (r.total - wrong.length) + ' / ' + r.total + '문항 정답'));
+    sc.appendChild(box);
+
+    if (wrong.length) {
+      var lab = function (txt) {
+        var p = el('p', null, txt);
+        p.style.cssText = 'font-size:13px;color:var(--dim);margin:14px 0 0';
+        sc.appendChild(p);
+      };
+      lab('틀린 문항');
+      var wn = el('div', 'wrongno');
+      wrong.forEach(function (w) { wn.appendChild(el('span', null, w.no + '번')); });
+      sc.appendChild(wn);
+
+      var byType = {};
+      wrong.forEach(function (w) { var k = w.type || '기타'; byType[k] = (byType[k] || 0) + 1; });
+      var keys = Object.keys(byType).sort(function (a, b) { return byType[b] - byType[a]; });
+      if (keys.length) {
+        lab('틀린 유형');
+        var ch = el('div', 'chips');
+        keys.forEach(function (k) { ch.appendChild(el('span', 'chip', k + ' ' + byType[k])); });
+        sc.appendChild(ch);
+      }
+    } else {
+      sc.appendChild(el('p', null, '전부 맞혔어요. 잘했어요!'));
+      sc.lastChild.style.cssText = 'text-align:center;color:var(--ok);font-weight:700;margin:12px 0 0';
+    }
+    app.appendChild(sc);
+
+    // ── 받기 — 시험지 / 해설지 / 틀린 것 다시 풀어보기 ─────────────
+    var dl = el('div', 'noprint');
+    var h2 = el('h2', null, '받기');
+    h2.style.cssText = 'font-size:17px;margin:18px 2px 2px';
+    dl.appendChild(h2);
+    var note = el('p', null, '누르면 인쇄 화면이 열립니다. 폰에서는 공유 → 프린트 → PDF 로 저장하세요.');
+    note.style.cssText = 'font-size:12.5px;color:var(--dim);margin:0 2px 12px';
+    dl.appendChild(note);
+
+    var menu = [
+      ['retry', '틀린 것 다시 풀어보기', wrong.length + '문항만 모아 시험지로 다시 만들어요 (정답 없이)'],
+      ['exam', '시험지', '이번 주 시험지 전체'],
+      ['key', '해설지', '정답과 해설'],
+    ];
+    menu.forEach(function (m) {
+      if (m[0] === 'retry' && !wrong.length) return;
+      var b = el('button', 'test');
+      var bx = el('div');
+      bx.appendChild(el('b', null, m[1]));
+      bx.appendChild(el('div', 'm', m[2]));
+      b.appendChild(bx);
+      b.appendChild(el('span', 'go2', '›'));
+      b.style.marginBottom = '8px';
+      b.addEventListener('click', function () { openPaper(m[0]); });
+      dl.appendChild(b);
+    });
+    app.appendChild(dl);
+    window.scrollTo(0, 0);
+  }
+
+  // ── ⑤ 시험지 · 해설지 · 다시 풀어보기 ─────────────────────────
+  // 문항은 채점을 끝낸 뒤에만 서버가 내려준다(grade_papers). 한 번 받아 두고 돌려 쓴다.
+  function openPaper(kind) {
+    if (S.papers) return viewPaper(kind);
+    rpc('grade_papers', { p_token: S.token, p_test: S.test.id })
+      .then(function (d) { S.papers = d; viewPaper(kind); })
+      .catch(function (e) { show(e.message); });
+  }
+
+  // {낱말} → 등장 순서대로 ①~⑤ 를 붙이고 밑줄 (앱의 wtRich 와 같은 규칙)
+  function rich(host, text, isInsert) {
+    var s = String(text || '');
+    if (isInsert) {
+      s.split(/(\(\s*[①②③④⑤]\s*\))/).forEach(function (seg) {
+        if (/^\(\s*[①②③④⑤]\s*\)$/.test(seg)) host.appendChild(el('span', 'wt-ins', seg));
+        else host.appendChild(document.createTextNode(seg));
+      });
+      return;
+    }
+    var re = /\{([^{}]*)\}/g, last = 0, m, n = 0;
+    while ((m = re.exec(s)) !== null) {
+      if (m.index > last) host.appendChild(document.createTextNode(s.slice(last, m.index)));
+      host.appendChild(el('span', 'wt-cn', CIRC[n] || ''));
+      host.appendChild(el('span', 'wt-u', m[1]));
+      n++; last = m.index + m[0].length;
+    }
+    if (last < s.length) host.appendChild(document.createTextNode(s.slice(last)));
+  }
+
+  // 원시 문항(payload) → 그릴 모양. 앱의 hwpxToItems 와 같은 규칙이다.
+  // isHead: 지문을 공유하는 묶음에서 **지금 남아 있는 것 중 첫 문항**인가.
+  function toView(it, isHead, label) {
+    var parts = [], rest = [];
+    (it.given || []).forEach(function (g) {
+      var m = String(g).match(/^\(([A-E])\)\s*([\s\S]*)$/);
+      if (m) parts.push({ label: m[1], text: m[2].trim() });
+      else rest.push(g);
+    });
+    var given = '', passage = '', givenAfter = false, arrow = false;
+    if (parts.length) {
+      given = (it.passage || []).join('\n');
+      if (rest.length) given = (given ? given + '\n' : '') + rest.join('\n');
+    } else {
+      passage = isHead ? (it.passage || []).join('\n') : '';
+      var body = rest.filter(function (x) { return x !== '↓'; });
+      arrow = rest.length !== body.length;
+      given = body.join('\n');
+      givenAfter = arrow;
+    }
+    var srcTail = it.source ? ' (' + it.source + ')' : '';
+    var lead = (it.shared && isHead)
+      ? (label ? label + ' ' : '') + (it.lead || '다음 글을 읽고 물음에 답하시오.') + srcTail : '';
+    return {
+      no: it.no, lead: lead, stem: it.shared ? it.prompt : it.prompt + srcTail,
+      given: given, passage: passage, givenAfter: givenAfter, arrow: arrow,
+      parts: parts.length ? parts : null, choices: it.choices || [],
+      isInsert: /순서|위치|들어가기에/.test(String(it.prompt || '')) && /\(\s*①\s*\)/.test((it.passage || []).join('')),
+    };
+  }
+
+  // 남은 문항으로 묶음을 다시 계산한다 — 묶음의 첫 문항을 맞혔어도
+  // 둘째를 틀렸으면 그 둘째에 지문이 붙어야 말이 된다.
+  function assemble(items) {
+    var group = {}, order = [];
+    items.forEach(function (it) {
+      if (!it.shared) return;
+      var k = it.source + '|' + ((it.passage || [])[0] || '');
+      if (!group[k]) { group[k] = []; order.push(k); }
+      group[k].push(it.no);
+    });
+    var labelOf = {};
+    order.forEach(function (k) {
+      var nos = group[k];
+      if (nos.length < 2) { labelOf[k] = ''; return; }           // 하나만 남으면 번호 묶음이 아니다
+      var contiguous = nos[nos.length - 1] - nos[0] === nos.length - 1;
+      labelOf[k] = '[' + (contiguous ? nos[0] + '-' + nos[nos.length - 1] : nos.join('·')) + ']';
+    });
+    var seen = {};
+    return items.map(function (it) {
+      var k = it.source + '|' + ((it.passage || [])[0] || '');
+      var head = !it.shared || !seen[k];
+      if (it.shared) seen[k] = true;
+      return toView(it, head, it.shared ? labelOf[k] : '');
+    });
+  }
+
+  function viewPaper(kind) {
+    app.innerHTML = '';
+    var P = S.papers, t = S.test;
+    var wrongNos = (P.wrong || []).map(Number);
+    var all = P.items || [];
+    var items = (kind === 'retry') ? all.filter(function (it) { return wrongNos.indexOf(Number(it.no)) >= 0; }) : all;
+
+    var TITLE = { exam: '시험지', key: '해설지', retry: '틀린 것 다시 풀어보기' }[kind];
+
+    var bar = el('div', 'noprint');
+    bar.style.cssText = 'display:flex;gap:8px;margin-bottom:12px';
+    var b1 = el('button', 'ghost', '← 결과로');
+    b1.addEventListener('click', function () { viewResult(true); });
+    var b2 = el('button', 'go', '인쇄 · PDF 저장');
+    b2.addEventListener('click', function () { window.print(); });
+    bar.appendChild(b1); bar.appendChild(b2);
+    app.appendChild(bar);
+
+    var h = el('h1', 'noprint', TITLE);
+    app.appendChild(h);
+    var sub = el('p', 'sub noprint', weekName(t.week_start) + ' 주간테스트 · '
+      + (kind === 'retry' ? items.length + '문항' : all.length + '문항'));
+    app.appendChild(sub);
+
+    var paper = el('div', 'wt');
+    // 머리글 — 평가원 양식
+    var hd = el('div', 'wt-head');
+    var line1 = el('div', 'wt-h1', (yearOf(t.week_start)) + '학년도 ' + weekName(t.week_start) + ' 주간테스트');
+    hd.appendChild(line1);
+    var line2 = el('div', 'wt-h2');
+    line2.appendChild(el('span', 'wt-area', '영어 영역'));
+    if (P.teacher) line2.appendChild(el('span', 'wt-cap', P.teacher + 'T'));
+    hd.appendChild(line2);
+    var who = el('div', 'wt-who', S.name + (kind === 'retry' ? ' · 틀린 ' + items.length + '문항 다시 풀기' : ''));
+    hd.appendChild(who);
+    paper.appendChild(hd);
+
+    if (kind === 'key') {
+      paper.appendChild(keyTable(P.keys || [], wrongNos));
+    } else {
+      var body = el('div', 'wt-body');
+      assemble(items).forEach(function (v) {
+        var d = el('div', 'wt-item');
+        if (v.lead) d.appendChild(el('div', 'wt-lead', v.lead));
+        if (v.lead && v.passage) { var pg = el('div', 'wt-psg'); rich(pg, v.passage, v.isInsert); d.appendChild(pg); }
+        var stem = el('div', 'wt-stem');
+        stem.appendChild(el('b', null, v.no + '.'));
+        stem.appendChild(document.createTextNode(' ' + v.stem));
+        d.appendChild(stem);
+        if (v.given && !v.givenAfter) d.appendChild(el('div', 'wt-given', v.given));
+        if (v.parts) {
+          v.parts.forEach(function (p) {
+            var pe = el('div', 'wt-part');
+            pe.appendChild(el('b', null, '(' + p.label + ')'));
+            pe.appendChild(document.createTextNode(' ' + p.text));
+            d.appendChild(pe);
+          });
+        } else if (v.passage && !v.lead) {
+          var pg2 = el('div', 'wt-psg'); rich(pg2, v.passage, v.isInsert); d.appendChild(pg2);
+        }
+        if (v.given && v.givenAfter) {
+          if (v.arrow) d.appendChild(el('div', 'wt-arrow', '↓'));
+          d.appendChild(el('div', 'wt-given', v.given));
+        }
+        if (v.choices.length) {
+          var ch = el('div', 'wt-ch' + (v.parts ? ' grid' : ''));
+          v.choices.forEach(function (c, i) { ch.appendChild(el('div', null, (CIRC[i] || '') + ' ' + c)); });
+          d.appendChild(ch);
+        }
+        body.appendChild(d);
+      });
+      paper.appendChild(body);
+    }
+    app.appendChild(paper);
+    window.scrollTo(0, 0);
+  }
+
+  // 해설지 — 정답표 + 해설. 틀린 문항에 표시를 남긴다.
+  function keyTable(keys, wrongNos) {
+    var box = el('div', 'wt-ans');
+    // 한 줄에 10문항씩 끊는다 — 30문항을 한 줄로 두면 종이 밖으로 나간다
+    var wrap = el('div');
+    for (var s = 0; s < keys.length; s += 10) {
+      var t2 = document.createElement('table');
+      var a = document.createElement('tr'), b = document.createElement('tr');
+      keys.slice(s, s + 10).forEach(function (k) {
+        var th = document.createElement('th'); th.textContent = k.no; a.appendChild(th);
+        var td = document.createElement('td');
+        td.textContent = circ(k.answer) || '-';
+        if (wrongNos.indexOf(Number(k.no)) >= 0) td.className = 'x';
+        b.appendChild(td);
+      });
+      t2.appendChild(a); t2.appendChild(b);
+      wrap.appendChild(t2);
+    }
+    box.appendChild(wrap);
+    keys.forEach(function (k) {
+      if (!k.explain) return;
+      var e = el('div', 'wt-exp');
+      var head = el('b', null, k.no + '. ');
+      e.appendChild(head);
+      if (k.type) e.appendChild(el('span', 'wt-kt', '[' + k.type + '] '));
+      e.appendChild(el('span', 'wt-ka', '정답 ' + (circ(k.answer) || '-') + '  '));
+      e.appendChild(document.createTextNode(k.explain));
+      if (wrongNos.indexOf(Number(k.no)) >= 0) e.className = 'wt-exp wrong';
+      box.appendChild(e);
+    });
+    return box;
+  }
+
+  viewLogin();
+})();
+</script>
+</body>
+</html>
