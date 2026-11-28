@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<!-- 탭 아이콘 = 학원 로고(흰 바탕 · 검은 로고 — 2026-11-16 사장님). 그림은 scripts/build-favicon.mjs 가 만든다 -->
+<link rel="icon" type="image/png" href="../favicon.png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<title>SL PRIME 상담 예약</title>
+<meta property="og:title" content="SL PRIME 상담 예약">
+<meta property="og:description" content="편하신 상담 시간을 골라 주세요.">
+<!--
+  학부모용 상담 예약 페이지 (공개). 앱(app/)과 별개로 GitHub Pages 에 올라간다(.github/workflows/release-web.yml).
+  ?k=<링크 토큰>   → 시간 고르기·예약
+  ?c=<취소 토큰>   → 내 예약 확인·취소
+  Supabase 는 anon 키로 RPC 네 개(booking_view·reserve·mine·cancel)만 부른다. 테이블 직접 접근은 RLS 로 막혀 있다.
+  의존성 없음(순수 JS) — 문자 링크로 들어오는 폰에서 빨리 떠야 한다.
+-->
+<style>
+  /* 디자인은 앱의 신UI 기준(레포 루트 DESIGN.md)을 따른다 — 2026-11-16 사장님: "일반 상담링크 디자인도 디자인.md 에 맞게".
+     학부모·학생 페이지(web/parents · web/student)와 같은 값이다: 먹(ink) 버튼 · 흰 종이 + 1px 선 · 모서리 8(카드)/6(컨트롤) ·
+     그림자·알약·틴트 상자·이모지 없음. 글자 12·13·13.5·14·16·20, 간격 4·8·12·16·20·24, 컨트롤 높이 36·42(입력 글자만 16 — iOS 확대 방지). */
+  @font-face { font-family: 'Inter'; font-weight: 400; font-display: swap; src: url('../prime/vendor/fonts/Inter-Regular.ttf') format('truetype'); }
+  @font-face { font-family: 'Inter'; font-weight: 600; font-display: swap; src: url('../prime/vendor/fonts/Inter-SemiBold.ttf') format('truetype'); }
+  @font-face { font-family: 'Inter'; font-weight: 700; font-display: swap; src: url('../prime/vendor/fonts/Inter-Bold.ttf') format('truetype'); }
+  @font-face { font-family: 'Spoqa Han Sans Neo'; font-weight: 400; font-display: swap; src: url('../prime/vendor/fonts/SpoqaHanSansNeo-Regular.ttf') format('truetype'); }
+  @font-face { font-family: 'Spoqa Han Sans Neo'; font-weight: 600 700; font-display: swap; src: url('../prime/vendor/fonts/SpoqaHanSansNeo-Bold.ttf') format('truetype'); }
+  :root {
+    --ground: #f4f4f2; --surface: #ffffff; --raised: #eeeeee; --active: #e9e9e7; --border: #e6e6e6; --control: #d4d4d4;
+    --text: #0a0a0a; --muted: #6b6b6b; --grey: #8a8a8a; --ink: #141414; --ink-text: #ffffff; --ink-hover: #2e2e2e; --neg: #c4242a; --pos: #2e7d32;
+    --accent: var(--text);   /* 옛 이름 — 스크립트의 인라인 색이 쓴다 */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #121212; --surface: #1b1b1b; --raised: #262626; --active: #2a2a2a; --border: #2c2c2c; --control: #3a3a3a;
+      --text: #f2f2f2; --muted: #9a9a9a; --grey: #777777; --ink: #e9e9e7; --ink-text: #111111; --ink-hover: #ffffff; --neg: #ef6b6b; --pos: #5fbf6a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; word-break: keep-all; overflow-wrap: anywhere; background: var(--ground); color: var(--text);
+    font-family: Inter, 'Spoqa Han Sans Neo', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+    font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  main { max-width: 520px; margin: 0 auto; padding: 0 16px calc(40px + env(safe-area-inset-bottom)); }
+  /* 위 막대 — 학부모·학생 페이지의 .mbar 와 같은 높이·선 */
+  .brand { height: 48px; display: flex; align-items: center; margin: 0 -16px 20px; padding: 0 16px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 700; }
+  h1 { font-size: 20px; font-weight: 600; line-height: 1.35; margin: 0 0 4px; letter-spacing: -0.3px; }
+  .sub { color: var(--muted); font-size: 13.5px; margin: 0 0 20px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 12px; }
+  .note { white-space: pre-wrap; font-size: 13.5px; line-height: 1.7; }
+  .meta { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; font-size: 14px; }
+  .meta dt { color: var(--muted); font-size: 13px; }
+  .meta dd { margin: 0; font-weight: 600; }
+  .sec { font-size: 12px; font-weight: 600; color: var(--muted); margin: 20px 0 8px; }
+  .days { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+  .days::-webkit-scrollbar { display: none; }
+  button, .btn { font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color .14s cubic-bezier(.2,0,0,1), border-color .14s cubic-bezier(.2,0,0,1), opacity .14s cubic-bezier(.2,0,0,1); }
+  .day { flex: none; min-width: 60px; padding: 8px; border-radius: 6px; border: 1px solid var(--control); background: var(--surface); color: var(--text); text-align: center; }
+  .day b { display: block; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .day small { display: block; font-size: 12px; color: var(--muted); }
+  .day[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--ink-text); }
+  .day[aria-pressed="true"] small { color: inherit; opacity: 0.75; }
+  .day:disabled { border-color: var(--border); color: var(--grey); cursor: default; }
+  .day:disabled small { color: var(--grey); }
+  .times { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .time { min-height: 42px; padding: 8px 4px; border-radius: 6px; border: 1px solid var(--control); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .time[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--ink-text); }
+  .time small { display: block; font-size: 12px; font-weight: 400; opacity: 0.75; }
+  .time:disabled { background: transparent; border-color: var(--border); color: var(--grey); text-decoration: line-through; font-weight: 400; cursor: default; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 16px 0 8px; }
+  label span { color: var(--grey); }
+  input, textarea { width: 100%; font: inherit; font-size: 16px; color: var(--text); background: var(--surface); border: 1px solid var(--control); border-radius: 6px; padding: 0 12px; height: 42px; outline: none;
+    transition: border-color .14s cubic-bezier(.2,0,0,1), box-shadow .14s cubic-bezier(.2,0,0,1); }
+  input:focus, textarea:focus { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+  textarea { height: auto; min-height: 84px; padding: 8px 12px; line-height: 1.5; resize: vertical; }
+  .btn { display: flex; align-items: center; justify-content: center; width: 100%; height: 42px; margin-top: 16px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: var(--ink-text); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .btn.ghost { background: transparent; border-color: var(--control); color: var(--text); font-weight: 400; }
+  .btn.danger { background: transparent; border-color: var(--control); color: var(--neg); font-weight: 400; }
+  @media (hover: hover) { .btn:not(:disabled):not(.ghost):not(.danger):hover { background: var(--ink-hover); } .btn.ghost:hover, .btn.danger:hover, .lookup-btn:hover, .linkbox button:hover { background: var(--active); } }
+  .msg { padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); font-size: 13.5px; margin: 12px 0 0; }
+  .msg.err { border-color: var(--neg); color: var(--neg); }
+  .card input.miss { border-color: var(--neg); box-shadow: 0 0 0 1px var(--neg); }
+  .msg.ok { border-color: var(--pos); color: var(--pos); }
+  .center { text-align: center; padding: 40px 12px; color: var(--muted); font-size: 13.5px; }
+  .big { display: none; }   /* 예전 이모지 자리 — 신UI 는 이모지를 쓰지 않는다 */
+  .chosen { font-size: 16px; font-weight: 600; margin: 0; font-variant-numeric: tabular-nums; }
+  .linkbox { display: flex; gap: 8px; margin-top: 12px; }
+  .linkbox input { font-size: 13px; height: 36px; }
+  .linkbox button { flex: none; height: 36px; padding: 0 16px; border: 1px solid var(--control); border-radius: 6px; background: transparent; color: var(--text); font-size: 13px; white-space: nowrap; }
+  .small { font-size: 12px; color: var(--grey); margin: 8px 0 0; }
+  .lookup-btn { display: block; width: 100%; height: 36px; margin: 0 0 4px; border: 1px solid var(--control); border-radius: 6px; background: transparent; color: var(--text); font-size: 13px; }
+  .back { border: none; background: none; color: var(--muted); font-size: 13px; padding: 4px 0; margin: 0 0 12px; }
+  table.lk { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  table.lk th { text-align: center; font-size: 12px; color: var(--muted); font-weight: 600; padding: 12px 8px; border-bottom: 1px solid var(--border); }
+  table.lk td { text-align: center; padding: 12px 8px; border-bottom: 1px solid var(--border); }
+  table.lk tr:last-child td { border-bottom: none; }
+  table.lk td.t { font-weight: 600; }
+  table.lk td.who { font-weight: 600; letter-spacing: 1px; }
+  table.lk td.free { color: var(--grey); }
+  table.lk td.st { font-size: 12px; color: var(--grey); }
+  footer { color: var(--grey); font-size: 12px; margin-top: 24px; }
+</style>
+</head>
+<body>
+<main id="app"><div class="center">불러오는 중…</div></main>
+<script>
+(function () {
+  'use strict';
+  var SUPA_URL = 'https://lfrawudhoppvvwktqbvg.supabase.co';
+  var SUPA_KEY = 'sb_publishable_tagOfpNlqNEXldBIPYqEvw_q0amXG8x';  // 공개용 키(앱과 같음). RLS·RPC 로 보호
+  var ERR = {
+    not_found: '링크를 찾을 수 없습니다. 받으신 주소가 맞는지 확인해 주세요.',
+    closed: '이 상담은 예약이 마감되었습니다. 학원으로 문의해 주세요.',
+    taken: '방금 다른 분이 먼저 예약하셨습니다. 다른 시간을 골라 주세요.',
+    past: '이미 지난 시간입니다.',
+    already: '이 학생은 이미 예약되어 있습니다. 시간을 바꾸시려면 기존 예약을 취소한 뒤 다시 골라 주세요.',
+    invalid: '입력하신 내용을 다시 확인해 주세요.'
+  };
+  var DOW = ['일', '월', '화', '수', '목', '금', '토'];
+  var app = document.getElementById('app');
+  var q = new URLSearchParams(location.search);
+
+  // 시안(?k=demo): 실제 DB 대신 예시 데이터. 예약은 되지 않는다
+  function demoView() {
+    var t = new Date(Date.now() + 9 * 3600000), base0 = Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()) - 9 * 3600000;
+    var mk = function (d, h, m, who) { return { id: 'd' + d + h + m, at: new Date(base0 + d * 86400000 + h * 3600000 + m * 60000).toISOString(), min: 30, taken: !!who, who: who || null }; };
+    return { title: '10월 학부모 상담 (시안)', place: 'SL PRIME 상담실', note: '시안 화면입니다. 실제로 예약되지는 않습니다.', owner: '박시환', active: true,
+      slots: [mk(1, 16, 0, '김*준'), mk(1, 16, 30), mk(1, 17, 0, '이*연'), mk(1, 17, 30), mk(1, 18, 0, '남**수'), mk(2, 15, 0), mk(2, 15, 30, '최*'), mk(2, 16, 0), mk(3, 14, 0), mk(3, 14, 30)] };
+  }
+  function rpc(name, args) {
+    if (args.p_token === 'demo') {
+      if (name === 'booking_view') return Promise.resolve(demoView());
+      return Promise.reject(new Error('시안 화면이라 실제로 예약되지는 않습니다.'));
+    }
+    return fetch(SUPA_URL + '/rest/v1/rpc/' + name, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY, Authorization: 'Bearer ' + SUPA_KEY },
+      body: JSON.stringify(args)
+    }).then(function (r) {
+      return r.json().catch(function () { return null; }).then(function (j) {
+        if (r.ok) return j;
+        var code = j && j.message;
+        var e = new Error(ERR[code] || '잠시 후 다시 시도해 주세요. (' + (code || r.status) + ')');
+        e.code = code;
+        throw e;
+      });
+    }, function () { throw new Error('인터넷 연결을 확인해 주세요.'); });
+  }
+
+  // 시간은 항상 한국 시간으로 보인다(해외 로밍 폰이어도)
+  function kst(iso) {
+    var d = new Date(new Date(iso).getTime() + 9 * 3600000);
+    return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate(), w: d.getUTCDay(), h: d.getUTCHours(), mi: d.getUTCMinutes() };
+  }
+  function dayKey(p) { return p.y + '-' + p.m + '-' + p.d; }
+  function hm(p) { return (p.h < 10 ? '0' : '') + p.h + ':' + (p.mi < 10 ? '0' : '') + p.mi; }
+  function fullDate(iso) { var p = kst(iso); return p.m + '월 ' + p.d + '일 (' + DOW[p.w] + ') ' + hm(p); }   // 24시간제
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fmtPhone(d) { d = String(d || ''); return d.length === 11 ? d.slice(0, 3) + '-' + d.slice(3, 7) + '-' + d.slice(7) : d.length === 10 ? d.slice(0, 3) + '-' + d.slice(3, 6) + '-' + d.slice(6) : d; }
+  function base() { return location.origin + location.pathname; }
+  function store(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
+  function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+  function fail(msg) {
+    app.innerHTML = '<div class="brand">SL PRIME</div><div class="card center">' + esc(msg) + '</div>';
+  }
+  function head(v) {
+    return '<div class="brand">SL PRIME</div><h1>' + esc(v.title) + '</h1>'
+      + '<p class="sub">' + esc(v.owner) + ' 선생님' + (v.place ? ' · ' + esc(v.place) : '') + '</p>'
+      + (v.note ? '<div class="card note">' + esc(v.note) + '</div>' : '');
+  }
+
+  // ── 예약 화면 ──────────────────────────────────────────────
+  function showBook(token) {
+    // 이 폰에서 이미 예약했으면 확인 화면으로
+    // (학원이 취소했으면 저장해 둔 표를 지우고 그냥 예약 화면으로. ?more=1 은 다른 자녀 예약)
+    var mine = load('slbk:' + token);
+    if (mine && q.get('more') !== '1') {
+      rpc('booking_mine', { p_cancel: mine }).then(function () {
+        location.replace(base() + '?c=' + encodeURIComponent(mine));
+      }, function (e) {
+        if (e.code === 'not_found') store('slbk:' + token, null);
+        q.set('more', '1'); showBook(token);
+      });
+      return;
+    }
+    rpc('booking_view', { p_token: token }).then(function (v) {
+      // 원생 대상 상담은 이 주소로 받지 않는다(2026-11-17 사장님 — "아예 쓸 일이 없게 해 원생 상대론"). 학부모·학생 페이지에 로그인해 「상담 예약」에서 고른다.
+      // 이 주소(?k=)는 비원생 상담 전용이다 — 원생이 여기로 들어오면 이름·연락처를 손으로 적게 되고 명단과 따로 논다.
+      if (v.audience === 'parents' || v.audience === 'student') {
+        var pg = v.audience === 'student' ? ['학생 페이지', '/student/'] : ['학부모 페이지', '/parents/'];
+        app.innerHTML = head(v) + '<div class="card center">이 상담은 ' + pg[0] + '에서 예약합니다.<br>로그인하신 뒤 「상담 예약」에서 시간을 골라 주세요.'
+          + '<a class="btn" id="goportal" href="' + pg[1] + '" style="text-decoration:none">' + pg[0] + '로 가기</a></div>';
+        return;
+      }
+      if (!v.active) { fail(ERR.closed); return; }
+      var open = v.slots.filter(function (s) { return !s.taken; });
+      if (!open.length) {
+        app.innerHTML = head(v) + '<button class="lookup-btn" id="lk">예약 조회</button><div class="card center">지금은 예약 가능한 시간이 없습니다.<br>학원으로 문의해 주세요.</div>';
+        document.getElementById('lk').onclick = function () { renderLookup(token, v, null); };
+        return;
+      }
+      renderBook(token, v);
+    }).catch(function (e) { fail(e.message); });
+  }
+
+  function renderBook(token, v, keepErr) {
+    var byDay = {}, days = [];
+    v.slots.forEach(function (s) {
+      var k = dayKey(kst(s.at));
+      if (!byDay[k]) { byDay[k] = []; days.push(k); }
+      byDay[k].push(s);
+    });
+    var st = { day: null, slot: null };
+    days.some(function (k) { if (byDay[k].some(function (s) { return !s.taken; })) { st.day = k; return true; } return false; });
+
+    app.innerHTML = head(v)
+      + '<button class="lookup-btn" id="lk">예약 조회</button>'
+      + '<div class="sec">날짜</div><div class="days" id="days"></div>'
+      + '<div class="sec">시간</div><div class="times" id="times"></div>'
+      + '<div class="card" style="margin-top:22px">'
+      + '<div class="chosen" id="chosen" style="margin-top:0">시간을 골라 주세요</div>'
+      + (v.audience === 'student'   // 학생 대상 상담이면 학부모 성함을 묻지 않는다(서버에는 '학생 본인' 으로 간다 — 2026-11-16)
+        ? '<input id="pn" type="hidden" value="학생 본인">'
+        : '<label for="pn">학부모 성함</label><input id="pn" autocomplete="name" maxlength="30">')
+      + '<label for="sn">학생 이름</label><input id="sn" maxlength="30">'
+      + '<label for="ph">' + (v.audience === 'student' ? '학생 연락처' : '학부모 연락처') + '</label><input id="ph" type="tel" inputmode="numeric" autocomplete="tel" placeholder="010-0000-0000" maxlength="13">'
+      // 비원생 상담은 학생 연락처도 받는다(2026-11-17 사장님 — "필수입력란에 학생 전화번호도"). 원생은 명단에 번호가 있어 묻지 않는다.
+      + (v.audience === 'guest' ? '<label for="sp">학생 연락처</label><input id="sp" type="tel" inputmode="numeric" placeholder="010-0000-0000" maxlength="13">' : '')
+      // 사전 질문(선생님이 링크에 적어 둔 것 — booking_view 의 questions). 전부 답해야 예약된다.
+      // 버튼은 막지 않는다: 안 적고 누르면 예약하지 않고, 빠진 첫 칸으로 올라가 빠진 칸마다 빨간 테두리를 두른다(2026-11-17 사장님). 성함·학생 이름·연락처도 같다.
+      + (v.questions || []).map(function (q, i) { return '<label for="q' + i + '">' + esc(q) + '</label><input id="q' + i + '" class="qa" maxlength="300">'; }).join('')
+      + '<button class="btn" id="go" disabled>예약하기</button>'
+      + '<div id="err"></div></div>'
+      + '<footer>SL PRIME</footer>';
+
+    var $ = function (id) { return document.getElementById(id); };
+    if (keepErr) $('err').innerHTML = '<div class="msg err">' + esc(keepErr) + '</div>';
+    $('lk').onclick = function () { renderLookup(token, v, st.day); };
+
+    function draw() {
+      $('days').innerHTML = days.map(function (k) {
+        var p = kst(byDay[k][0].at);
+        var free = byDay[k].some(function (s) { return !s.taken; });
+        return '<button class="day" data-k="' + k + '" aria-pressed="' + (k === st.day) + '"' + (free ? '' : ' disabled') + '>'
+          + '<small>' + p.m + '월</small><b>' + p.d + '</b><small>' + DOW[p.w] + '</small></button>';
+      }).join('');
+      $('times').innerHTML = (byDay[st.day] || []).map(function (s) {
+        return '<button class="time" data-id="' + s.id + '" aria-pressed="' + (st.slot && st.slot.id === s.id) + '"' + (s.taken ? ' disabled aria-label="마감"' : '') + '>' + hm(kst(s.at)) + '<small>~' + hm(kst(new Date(new Date(s.at).getTime() + s.min * 60000).toISOString())) + (s.cap > 1 && !s.taken ? ' · ' + s.left + '자리' : '') + '</small></button>';   // 한 타임 여러 명이면 남은 자리
+      }).join('');
+      $('chosen').textContent = st.slot ? fullDate(st.slot.at) + ' (' + st.slot.min + '분)' : '시간을 골라 주세요';
+      check();
+    }
+    function check() {
+      $('go').disabled = !st.slot;   // 시간만 고르면 눌린다 — 빠진 칸은 눌렀을 때 알려 준다(아래 lacks)
+    }
+    $('days').onclick = function (e) {
+      var b = e.target.closest('.day'); if (!b || b.disabled) return;
+      st.day = b.getAttribute('data-k'); st.slot = null; draw();
+    };
+    $('times').onclick = function (e) {
+      var b = e.target.closest('.time'); if (!b || b.disabled) return;
+      var id = b.getAttribute('data-id');
+      st.slot = byDay[st.day].filter(function (s) { return s.id === id; })[0]; draw();
+      $('pn').value ? null : $('pn').focus({ preventScroll: true });
+    };
+    // 칸이 채워졌는가 — 성함·학생 이름·연락처(숫자 9자리 이상)·사전 질문 전부 같은 규칙으로 본다(2026-11-17 사장님 — "같은 방식으로 맞춘 뒤")
+    function filled(x) { return x.type === 'tel' ? x.value.replace(/\D/g, '').length >= 9 : !!x.value.trim(); }
+    function fields() { return [$('pn'), $('sn'), $('ph'), $('sp')].filter(function (x) { return x && x.type !== 'hidden'; }).concat(Array.prototype.slice.call(document.querySelectorAll('.qa'))); }
+    ['pn', 'sn', 'ph'].forEach(function (id) { $(id).addEventListener('input', function () { if (filled(this)) this.classList.remove('miss'); check(); }); });
+    Array.prototype.forEach.call(document.querySelectorAll('.qa'), function (x) { x.addEventListener('input', function () { if (filled(x)) x.classList.remove('miss'); check(); }); });
+    [$('ph'), $('sp')].forEach(function (t) { if (t) t.addEventListener('input', function () {
+      var d = this.value.replace(/\D/g, '').slice(0, 11);
+      this.value = d.length > 7 ? d.slice(0, 3) + '-' + d.slice(3, d.length - 4) + '-' + d.slice(-4) : d.length > 3 ? d.slice(0, 3) + '-' + d.slice(3) : d;
+      if (filled(this)) this.classList.remove('miss');
+    }); });
+    if ($('sp')) $('sp').addEventListener('input', check);
+    $('go').onclick = function () {
+      var qs0 = fields();
+      var miss = qs0.filter(function (x) { return !filled(x); });
+      if (miss.length) {
+        qs0.forEach(function (x) { x.classList.toggle('miss', !filled(x)); });
+        var lb = document.querySelector('label[for="' + miss[0].id + '"]') || miss[0];
+        lb.scrollIntoView({ behavior: 'smooth', block: 'center' }); miss[0].focus({ preventScroll: true });
+        return;
+      }
+      var btn = this; btn.disabled = true; btn.textContent = '예약하는 중…'; $('err').innerHTML = '';
+      var args = { p_token: token, p_slot: st.slot.id, p_parent: $('pn').value, p_student: $('sn').value, p_phone: $('ph').value, p_memo: '' };   // 자유 메모 칸은 없앴다(2026-11-16 사장님) — 물을 것은 선생님이 사전 질문으로 넣는다
+      // 답은 질문이 있을 때만 보낸다 — 질문이 없는 링크는 예전 인자 그대로 부른다(서버 SQL 이 옛것이어도 예약이 된다)
+      var qa = document.querySelectorAll('.qa');
+      if (qa.length) args.p_answers = Array.prototype.map.call(qa, function (x) { return x.value.trim(); });
+      // 학생 연락처(비원생) — 서버 SQL 이 옛것이면 그 인자를 모른다. 그때는 번호를 잃지 않게 메모로 실어 다시 부른다(앱 일정의 「상담 내용」에 보인다).
+      var send = function () {
+        if (!$('sp')) return rpc('booking_reserve', args);
+        return rpc('booking_reserve', Object.assign({}, args, { p_student_phone: $('sp').value })).catch(function (e) {
+          if (!/Could not find the function/.test(String(e.code || ''))) throw e;
+          return rpc('booking_reserve', Object.assign({}, args, { p_memo: '학생 연락처 ' + $('sp').value }));
+        });
+      };
+      send().then(function (r) {
+        store('slbk:' + token, r.cancel);
+        location.replace(base() + '?c=' + encodeURIComponent(r.cancel) + '&new=1');
+      }).catch(function (e) {
+        if (e.code === 'taken' || e.code === 'past') {
+          // 판이 바뀌었다 — 새로 받아서 다시 그린다(입력값은 유지)
+          var keep = { pn: $('pn').value, sn: $('sn').value, ph: $('ph').value }; if ($('sp')) keep.sp = $('sp').value;
+          rpc('booking_view', { p_token: token }).then(function (v2) {
+            renderBook(token, v2, e.message);
+            Object.keys(keep).forEach(function (id) { $(id).value = keep[id]; });
+          }).catch(function (e2) { fail(e2.message); });
+          return;
+        }
+        $('err').innerHTML = '<div class="msg err">' + esc(e.message) + '</div>';
+        btn.textContent = '예약하기'; check();
+      });
+    };
+    draw();
+  }
+
+  // ── 예약 조회: 성함 + 연락처를 넣으면 **본인이 예약한 시간**만 보여 준다(2026-11-16 사장님) ──
+  // 예전엔 날짜별 시간표에 다른 사람 예약까지(이름 가운데를 * 로 가려) 다 보여 줬다. 지금은 서버(booking_find)가
+  // 성함·연락처가 둘 다 맞는 예약만 준다. 찾은 예약을 누르면 확인·취소 화면(?c=)으로 간다.
+  function renderLookup(token, v) {
+    var $ = function (id) { return document.getElementById(id); };
+    var stu = v.audience === 'student';
+    app.innerHTML = '<div class="brand">SL PRIME</div>'
+      + '<button class="back" id="bk">‹ 예약하기로 돌아가기</button>'
+      + '<h1>예약 조회</h1><p class="sub">' + esc(v.title) + ' · ' + esc(v.owner) + ' 선생님</p>'
+      + '<div class="card">'
+      + '<label for="ln" style="margin-top:0">' + (stu ? '학생 이름' : '학부모 성함') + '</label><input id="ln" autocomplete="name" maxlength="30">'
+      + '<label for="lp">' + (stu ? '학생 연락처' : '학부모 연락처') + '</label><input id="lp" type="tel" inputmode="numeric" autocomplete="tel" placeholder="010-0000-0000" maxlength="13">'
+      + '<button class="btn" id="lgo">조회하기</button><div id="err"></div></div>'
+      + '<div id="found"></div>'
+      + '<p class="small">예약할 때 적으신 ' + (stu ? '이름' : '성함') + '과 연락처를 그대로 넣어 주세요.</p>'
+      + '<footer>SL PRIME</footer>';
+    $('bk').onclick = function () { showBook(token); };
+    $('lp').addEventListener('input', function () {
+      var d = this.value.replace(/\D/g, '').slice(0, 11);
+      this.value = d.length > 7 ? d.slice(0, 3) + '-' + d.slice(3, d.length - 4) + '-' + d.slice(-4) : d.length > 3 ? d.slice(0, 3) + '-' + d.slice(3) : d;
+    });
+    function go() {
+      var nm = $('ln').value.trim(), ph = $('lp').value.replace(/\D/g, '');
+      $('err').innerHTML = ''; $('found').innerHTML = '';
+      if (!nm || ph.length < 9) { $('err').innerHTML = '<div class="msg err">' + (stu ? '이름' : '성함') + '과 연락처를 넣어 주세요.</div>'; return; }
+      var btn = $('lgo'); btn.disabled = true; btn.textContent = '조회하는 중…';
+      rpc('booking_find', { p_token: token, p_name: nm, p_phone: ph }).then(function (list) {
+        btn.disabled = false; btn.textContent = '조회하기';
+        list = list || [];
+        if (!list.length) { $('err').innerHTML = '<div class="msg err">예약을 찾지 못했습니다. 예약할 때 적은 ' + (stu ? '이름' : '성함') + '과 연락처가 맞는지 확인해 주세요.</div>'; return; }
+        $('found').innerHTML = list.map(function (m) {
+          var e = kst(new Date(new Date(m.at).getTime() + m.min * 60000).toISOString());
+          return '<div class="card"><dl class="meta">'
+            + '<dt>일시</dt><dd>' + fullDate(m.at) + ' – ' + hm(e) + '</dd>'
+            + '<dt>학생</dt><dd>' + esc(m.student) + '</dd>'
+            + (m.past ? '<dt>상태</dt><dd style="font-weight:400">지난 상담</dd>' : '')
+            + '</dl>' + (m.past ? '' : '<a class="btn ghost" href="' + esc(base() + '?c=' + encodeURIComponent(m.cancel)) + '">예약 확인 · 취소</a>') + '</div>';
+        }).join('');
+      }).catch(function (e) {
+        btn.disabled = false; btn.textContent = '조회하기';
+        $('err').innerHTML = '<div class="msg err">' + esc(e.message) + '</div>';
+      });
+    }
+    $('lgo').onclick = go;
+    $('lp').addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+    $('ln').focus();
+    window.scrollTo(0, 0);
+  }
+
+  // ── 내 예약 확인·취소 ───────────────────────────────────────
+  function showMine(ctok, isNew) {
+    rpc('booking_mine', { p_cancel: ctok }).then(function (m) {
+      store('slbk:' + m.token, ctok);
+      var url = base() + '?c=' + encodeURIComponent(ctok);
+      app.innerHTML = '<div class="brand">SL PRIME</div>'
+        + (isNew ? '<div class="card center" style="padding:28px 12px"><b style="font-size:20px;font-weight:600;color:var(--text)">예약되었습니다</b></div>' : '<h1>예약 확인</h1><p class="sub">' + esc(m.title) + '</p>')
+        + '<div class="card"><dl class="meta">'
+        + '<dt>일시</dt><dd>' + esc(fullDate(m.at)) + ' · ' + m.min + '분</dd>'
+        + '<dt>상담</dt><dd>' + esc(m.title) + '</dd>'
+        + '<dt>선생님</dt><dd>' + esc(m.owner) + '</dd>'
+        + (m.place ? '<dt>장소</dt><dd>' + esc(m.place) + '</dd>' : '')
+        + '<dt>학생</dt><dd>' + esc(m.student) + '</dd>'
+        + '<dt>학부모</dt><dd>' + esc(m.parent) + ' · ' + esc(fmtPhone(m.phone)) + '</dd>'
+        + (m.memo ? '<dt>내용</dt><dd style="font-weight:400;white-space:pre-wrap">' + esc(m.memo) + '</dd>' : '')
+        + '</dl></div>'
+        + (m.past ? '<div class="card center" style="padding:20px">지난 상담입니다.</div>'
+          // 주소 보관 안내·주소 칸·복사 버튼은 뺐다(2026-11-16 사장님 — "예약취소버튼만 남겨놔"). 다시 찾을 땐 `예약 조회`(성함 + 연락처)로 들어온다.
+          // `다른 자녀도 예약하기` 버튼도 뺐다(같은 날 사장님) — 이 화면에는 예약 취소만 있다.
+          : '<button class="btn danger" id="cx" style="margin-top:0">예약 취소</button><div id="err"></div>')
+        + '<footer>SL PRIME</footer>';
+      if (isNew) history.replaceState(null, '', url);
+      if (m.past) return;
+      document.getElementById('cx').onclick = function () {
+        if (!confirm(fullDate(m.at) + ' 상담 예약을 취소할까요?')) return;
+        var b = this; b.disabled = true; b.textContent = '취소하는 중…';
+        rpc('booking_cancel', { p_cancel: ctok }).then(function (r) {
+          store('slbk:' + r.token, null);
+          app.innerHTML = '<div class="brand">SL PRIME</div><div class="card center">예약이 취소되었습니다.</div>'
+            + (m.active ? '<a class="btn ghost" href="' + esc(base() + '?k=' + encodeURIComponent(r.token)) + '">다른 시간으로 다시 예약하기</a>' : '');
+        }).catch(function (e) {
+          document.getElementById('err').innerHTML = '<div class="msg err">' + esc(e.message) + '</div>';
+          b.disabled = false; b.textContent = '예약 취소';
+        });
+      };
+    }).catch(function (e) {
+      // 취소된 예약의 토큰이 남아 있으면 지운다
+      if (e.code === 'not_found') {
+        try { Object.keys(localStorage).forEach(function (k) { if (k.indexOf('slbk:') === 0 && localStorage.getItem(k) === ctok) localStorage.removeItem(k); }); } catch (x) {}
+        fail('예약을 찾을 수 없습니다. 이미 취소되었을 수 있습니다.');
+        return;
+      }
+      fail(e.message);
+    });
+  }
+
+  var c = q.get('c'), k = q.get('k');
+  if (c) showMine(c, q.get('new') === '1');
+  else if (k) showBook(k);
+  else fail('받으신 예약 링크로 들어와 주세요.');
+})();
+</script>
+</body>
+</html>
